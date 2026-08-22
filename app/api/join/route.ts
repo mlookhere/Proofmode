@@ -13,10 +13,7 @@ export async function POST(request: Request) {
   const nextPath = `/c/${slug}${inviteCode ? `?ref=${encodeURIComponent(inviteCode)}` : ""}`;
   if (!user) return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(nextPath)}`, request.url), 303);
 
-  let joined = await supabase.rpc("join_challenge_v2", { target_slug: slug, target_invite_code: inviteCode });
-  if (joined.error && joined.error.message.toLowerCase().includes("function") && joined.error.message.toLowerCase().includes("does not exist")) {
-    joined = await supabase.rpc("join_public_challenge", { target_slug: slug });
-  }
+  const joined = await supabase.rpc("join_challenge_v2", { target_slug: slug, target_invite_code: inviteCode });
   if (joined.error) {
     const message = joined.error.message.toLowerCase();
     if (message.includes("crew full")) return NextResponse.redirect(new URL(`/pricing?reason=crew_full`, request.url), 303);

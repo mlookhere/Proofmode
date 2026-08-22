@@ -27,15 +27,14 @@ The feed must be entertaining enough to open with no intention to post, while ev
 - creator/launch copy and acquisition sequence
 
 ## Execute from the current checkpoint
-1. **Staging verification:** follow `docs/STAGING_VERIFICATION.md` to dry-run/apply migrations `001 → 005`, run the transactional pgTAP suite against staging, and exercise the live mobile reads.
-2. **Finish mobile auth:** Apple, Google, the plan-required email magic-link fallback/recovery flow, provider configuration, and device testing.
-3. **Challenge actions:** wire Join / Watch and the minimum persisted Explore state.
-4. **Media/Create:** camera/library → signed upload → processing → moderation → publish recovery.
-5. **Social:** reactions, comments, follows, Crew data, report, and block.
-6. **Proof/Journey/Passport:** verified ledger, streak/reset/comeback rules, history.
-7. **Sharing + push:** canonical links, hosted association files, native share, attribution, then contextual notifications.
-8. **Monetization:** RevenueCat entitlements/paywalls/restore; keep Black private/server-owned.
-9. **Closed alpha:** seed content and small real communities, then fix activation, retention, safety, and media-cost issues before broad launch.
+1. **Finish mobile auth:** staging verification is complete through migration `006`; implement the plan-required email magic-link fallback, then Apple/Google provider integration and device testing.
+2. **Challenge actions:** wire Join / Watch and the minimum persisted Explore state.
+3. **Media/Create:** camera/library → signed upload → processing → moderation → publish recovery.
+4. **Social:** reactions, comments, follows, Crew data, report, and block.
+5. **Proof/Journey/Passport:** verified ledger, streak/reset/comeback rules, history.
+6. **Sharing + push:** canonical links, hosted association files, native share, attribution, then contextual notifications.
+7. **Monetization:** RevenueCat entitlements/paywalls/restore; keep Black private/server-owned.
+8. **Closed alpha:** seed content and small real communities, then fix activation, retention, safety, and media-cost issues before broad launch.
 
 `docs/DEVELOPMENT_STATUS.md` is the authoritative implementation checkpoint if this sequence changes.
 

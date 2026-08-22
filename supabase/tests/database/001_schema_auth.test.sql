@@ -22,8 +22,8 @@ select ok(
 );
 
 select ok(
-  (select count(*) >= 60 from public.challenge_templates),
-  'the 60 launch challenge templates are loaded'
+  (select count(*) = 60 from public.challenge_templates),
+  'the canonical 60 launch challenge templates are loaded'
 );
 
 select ok(

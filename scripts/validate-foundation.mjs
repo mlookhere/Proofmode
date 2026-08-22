@@ -19,6 +19,7 @@ assert(
     "003_entertainment_engine.sql",
     "004_template_library.sql",
     "005_feed_pagination.sql",
+    "006_staging_hardening.sql",
   ]),
   `Unexpected migration set: ${migrations.join(", ")}`,
 );
@@ -26,6 +27,14 @@ assert(
 const templatesSql = await read("supabase/migrations/004_template_library.sql");
 const templateCount = templatesSql.split("\n").filter((line) => line.startsWith("('")).length;
 assert(templateCount === 60, `Expected 60 launch templates, found ${templateCount}`);
+
+const hardeningSql = await read("supabase/migrations/006_staging_hardening.sql");
+for (const staleTemplate of ["declutter-10", "desk-reset", "no-doordash", "stairs", "water-break"]) {
+  assert(hardeningSql.includes(`'${staleTemplate}'`), `Missing stale template cleanup: ${staleTemplate}`);
+}
+assert(hardeningSql.includes("alter function public.is_challenge_member(uuid) set schema private"), "RLS helper is still exposed in public");
+assert(hardeningSql.includes("drop function if exists public.join_public_challenge(text)"), "Legacy join RPC was not removed");
+assert(hardeningSql.includes("to service_role"), "Billing RPC service-role grant is missing");
 
 const entertainmentSql = await read("supabase/migrations/003_entertainment_engine.sql");
 assert(entertainmentSql.includes("create or replace function public.get_feed_v1"), "Missing baseline get_feed_v1 feed RPC");
@@ -78,6 +87,7 @@ assert(supabaseConfig.includes('project_id = "proofmode"'), "Supabase local proj
 for (const testFile of [
   "supabase/tests/database/001_schema_auth.test.sql",
   "supabase/tests/database/002_rls.test.sql",
+  "supabase/tests/database/003_security_hardening.test.sql",
   "supabase/tests/local/003_feed_pagination.test.sql",
 ]) {
   const sql = await read(testFile);
@@ -90,6 +100,9 @@ for (const testFile of [
 
 const ci = await read(".github/workflows/ci.yml");
 assert(ci.includes("supabase/setup-cli@v1"), "CI is missing Supabase CLI setup");
+assert(ci.includes("supabase start"), "CI must start the local Supabase stack with supabase start");
+assert(!ci.includes("supabase db start"), "CI uses obsolete supabase db start");
+assert(ci.includes("supabase db lint --level error --fail-on error"), "CI is missing database linting");
 assert(ci.includes("supabase test db supabase/tests/database supabase/tests/local"), "CI is missing complete database tests");
 
 const envExample = await read("mobile/.env.example");

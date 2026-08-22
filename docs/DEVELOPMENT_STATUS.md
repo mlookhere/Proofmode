@@ -5,56 +5,55 @@
 
 ## Current state
 
-### Implemented in code
+### Implemented and verified
 - Expo SDK 57 mobile app with Home / Explore / Post / Crews / You.
-- Supabase migrations `001` through `005`, including social/media/safety schema, `get_feed_v1`, profile snapshots, and 60 launch templates.
-- iOS associated-domain and Android App Link intent configuration.
-- Local / staging / production mobile public environment contract.
+- Supabase migrations `001` through `006` are applied to the isolated live Proofmode staging project.
+- The canonical launch library is enforced at exactly 60 challenge templates.
+- RLS-only `SECURITY DEFINER` helpers live in the non-exposed `private` schema instead of public RPC space.
+- The obsolete `join_public_challenge` RPC is removed; `join_challenge_v2` is the single join path.
+- Billing synchronization is explicitly `service_role` only.
 - One mobile Supabase client with persistent AsyncStorage-backed sessions.
-- One root auth/session provider with React Native foreground/background token refresh handling.
-- Email/password sign-in and sign-up are implemented as the current staging bootstrap path; the product plan still requires Apple/Google with email magic-link fallback before release.
+- One root auth/session provider with foreground/background token refresh handling.
+- Email/password remains only a staging bootstrap; release auth follows the master plan: Apple, Google, email magic-link fallback.
 - Public Home and Explore remain readable while signed out; Post, Crews, and You require a session.
-- Home reads the live `get_feed_v1` RPC with pull-to-refresh and keyset-based infinite scroll.
+- Home reads live `get_feed_v1` with pull-to-refresh and deterministic keyset infinite scroll.
 - Explore reads live `challenge_templates`.
-- You reads the signed-in `profiles` row and `get_profile_snapshot` metrics instead of demo profile numbers.
-- Demo records remain isolated and are used only when no Supabase environment is configured, never as a silent fallback after a live backend error.
-- Foundation validation and CI cover schema/static checks, transactional Supabase pgTAP database tests, mobile locked install/typecheck, and web typecheck/build.
-- Supabase local project config and repeatable database tests cover RLS, auth/profile triggers, join/watch boundaries, and feed pagination.
-- Mobile package and Expo app versions are kept in sync by validation.
+- You reads the signed-in profile plus `get_profile_snapshot`.
+- CI covers foundation validation, local Supabase startup, database linting, transactional pgTAP tests, mobile locked install/typecheck, and web typecheck/build.
+- Live staging smoke checks verified auth-triggered profile creation and the current schema/security boundary.
 
-### Present but not production-verified
-- Local/CI database verification is wired, but migrations and RLS still need the same pgTAP suite run against the real isolated staging Supabase project.
-- Universal/App Link app configuration exists; hosted association files and device-level tests are still required.
-- Create and Crew screens are authenticated shells; their mutations/data are not connected yet.
+### Present but not fully device-verified
+- Universal/App Link configuration exists; hosted association files and device-level tests are still required.
+- Create and Crew screens are authenticated shells; mutations/data are not connected yet.
+- The root web project still lacks a lockfile, so web CI intentionally remains `npm install` until a lockfile can be generated and validated.
 
 ### Not implemented yet
-- Apple / Google sign-in and the plan-required email magic-link fallback/recovery flow.
-- Challenge join/watch mutations.
+- Apple / Google sign-in and the plan-required email magic-link fallback.
+- Challenge join/watch mutations in the mobile UI.
 - Media capture/upload/processing/moderation/publish recovery.
 - Reactions, comments, follows, live Crew data, report/block.
 - Sharing/attribution, push, RevenueCat, Sentry, and PostHog.
-- Root web lockfile hardening; the web CI job still uses `npm install`.
 
 ## Execution order from here
 
-1. **Staging verification** — link the isolated staging project, dry-run/apply migrations `001→005`, run the pgTAP suite against staging, then test the live mobile reads and feed pagination.
-2. **Finish auth** — Apple, Google, the plan-required email magic-link fallback/recovery flow, provider configuration, device tests.
-3. **Challenge actions** — join/watch and the minimum persisted state needed by Explore.
-4. **Media/create path** — capture/library, signed upload, processing state, moderation, publish recovery.
-5. **Social actions** — reactions, comments, follows, Crew basics, report/block.
-6. **Journey/proof integration** — proof ledger, streak/reset/comeback behavior, Passport metrics.
-7. **Sharing and attribution** — exact-content links, hosted association files, native share, invite attribution.
-8. **Push and monetization** — notifications/preferences first, then RevenueCat.
-9. **Closed alpha** — seed content, small real communities, activation/retention/safety/media-cost validation.
+1. **Finish auth** — email magic-link fallback/deep-link handling first, then Apple and Google provider integration/configuration and physical-device tests.
+2. **Challenge actions** — join/watch and the minimum persisted state needed by Explore.
+3. **Media/create path** — capture/library, signed upload, processing state, moderation, publish recovery.
+4. **Social actions** — reactions, comments, follows, Crew basics, report/block.
+5. **Journey/proof integration** — proof ledger, streak/reset/comeback behavior, Passport metrics.
+6. **Sharing and attribution** — exact-content links, hosted association files, native share, invite attribution.
+7. **Push and monetization** — notifications/preferences first, then RevenueCat.
+8. **Closed alpha** — seed content, small real communities, activation/retention/safety/media-cost validation.
 
 ## DRY / KISS / YAGNI guardrails
 
 - One Supabase client and one session provider. No custom auth framework.
-- Domain-specific query functions only; no generic repository/data-access abstraction until multiple implementations create real duplication.
+- Domain-specific query functions only; no repository/data-access abstraction until real duplication exists.
+- Keep authorization in RLS/RPC boundaries instead of duplicating it in clients.
+- Keep internal `SECURITY DEFINER` helpers outside exposed schemas.
 - Backend values are canonical. UI formatting stays in UI/mappers.
 - Do not invent metrics the schema does not return.
 - Do not silently replace failed production reads with demo data.
-- Do not implement unstable pagination just because an RPC exposes a cursor-shaped parameter.
 - Use existing Postgres/Supabase infrastructure before adding search, queues, or feed services.
 - Use native share before platform posting SDKs.
 - Do not add DMs, live video, ML ranking, broad contacts access, or unrelated features during MVP.
