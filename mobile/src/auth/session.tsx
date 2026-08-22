@@ -1,12 +1,16 @@
 import type { PropsWithChildren } from "react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import * as Linking from "expo-linking";
 import { AppState } from "react-native";
 import type { Session } from "@supabase/supabase-js";
+import { completeAuthFromUrl } from "@/auth/deep-link";
 import { supabase } from "@/lib/supabase";
 
 type AuthState = Readonly<{
   session: Session | null;
   isLoading: boolean;
+  authError: string | null;
+  clearAuthError: () => void;
   signOut: () => Promise<void>;
 }>;
 
@@ -15,6 +19,7 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(supabase));
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const client = supabase;
@@ -24,6 +29,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
 
     let active = true;
+
+    const handleAuthUrl = async (url: string | null) => {
+      if (!url) return;
+      try {
+        await completeAuthFromUrl(url);
+        if (active) setAuthError(null);
+      } catch (cause) {
+        if (active) setAuthError(cause instanceof Error ? cause.message : "Could not complete sign-in.");
+      }
+    };
 
     client.auth.getSession().then(({ data }) => {
       if (!active) return;
@@ -37,6 +52,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setIsLoading(false);
     });
 
+    Linking.getInitialURL().then(handleAuthUrl);
+    const linkListener = Linking.addEventListener("url", ({ url }) => handleAuthUrl(url));
+
     if (AppState.currentState === "active") client.auth.startAutoRefresh();
     const appStateListener = AppState.addEventListener("change", (state) => {
       if (state === "active") client.auth.startAutoRefresh();
@@ -47,6 +65,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       client.auth.stopAutoRefresh();
       active = false;
       authListener.subscription.unsubscribe();
+      linkListener.remove();
       appStateListener.remove();
     };
   }, []);
@@ -54,10 +73,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const value = useMemo<AuthState>(() => ({
     session,
     isLoading,
+    authError,
+    clearAuthError: () => setAuthError(null),
     signOut: async () => {
       if (supabase) await supabase.auth.signOut();
     },
-  }), [session, isLoading]);
+  }), [session, isLoading, authError]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1,48 +1,45 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { authRedirectUrl } from "@/auth/deep-link";
+import { useAuth } from "@/auth/session";
 import { Eyebrow, PrimaryButton, Screen } from "@/components/ui";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
 import { colors, radius, spacing } from "@/theme";
 
-type Mode = "sign-in" | "sign-up";
-
 export default function AuthScreen() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("sign-in");
+  const { session, authError, clearAuthError } = useAuth();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function submit() {
+  useEffect(() => {
+    if (session) router.replace("/(tabs)/you");
+  }, [router, session]);
+
+  async function sendMagicLink() {
     const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || !password) {
-      setError("Enter your email and password.");
+    if (!normalizedEmail) {
+      setError("Enter your email.");
       return;
     }
 
     setIsSubmitting(true);
     setError(null);
     setMessage(null);
+    clearAuthError();
 
     try {
-      const client = requireSupabase();
-      const result = mode === "sign-in"
-        ? await client.auth.signInWithPassword({ email: normalizedEmail, password })
-        : await client.auth.signUp({ email: normalizedEmail, password });
-
-      if (result.error) throw result.error;
-
-      if (result.data.session) {
-        router.replace("/(tabs)/you");
-        return;
-      }
-
-      setMessage("Check your email to confirm your account, then sign in.");
+      const { error: signInError } = await requireSupabase().auth.signInWithOtp({
+        email: normalizedEmail,
+        options: { emailRedirectTo: authRedirectUrl },
+      });
+      if (signInError) throw signInError;
+      setMessage("Check your email for your ProofMode sign-in link.");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Authentication failed.");
+      setError(cause instanceof Error ? cause.message : "Could not send sign-in link.");
     } finally {
       setIsSubmitting(false);
     }
@@ -61,9 +58,9 @@ export default function AuthScreen() {
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <Screen contentStyle={styles.centered}>
-        <Eyebrow>{mode === "sign-in" ? "WELCOME BACK" : "MAKE IT REAL"}</Eyebrow>
-        <Text style={styles.title}>{mode === "sign-in" ? "SIGN IN." : "JOIN PROOFMODE."}</Text>
-        <Text style={styles.copy}>Your feed stays public. An account is only required when you want to post, join, or keep your own proof history.</Text>
+        <Eyebrow>WELCOME TO PROOFMODE</Eyebrow>
+        <Text style={styles.title}>SIGN IN.</Text>
+        <Text style={styles.copy}>Enter your email and we’ll send one secure sign-in link. New here? The same link creates your account.</Text>
 
         <View style={styles.form}>
           <TextInput
@@ -74,37 +71,18 @@ export default function AuthScreen() {
             placeholderTextColor={colors.muted}
             value={email}
             onChangeText={setEmail}
-            style={styles.input}
-          />
-          <TextInput
-            autoCapitalize="none"
-            autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
-            placeholder="Password"
-            placeholderTextColor={colors.muted}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
+            onSubmitEditing={isSubmitting ? undefined : sendMagicLink}
+            returnKeyType="send"
             style={styles.input}
           />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error || authError ? <Text style={styles.error}>{error ?? authError}</Text> : null}
           {message ? <Text style={styles.success}>{message}</Text> : null}
 
-          <PrimaryButton onPress={isSubmitting ? undefined : submit}>
-            {isSubmitting ? <ActivityIndicator color={colors.bg} /> : mode === "sign-in" ? "SIGN IN" : "CREATE ACCOUNT"}
+          <PrimaryButton onPress={isSubmitting ? undefined : sendMagicLink}>
+            {isSubmitting ? <ActivityIndicator color={colors.bg} /> : "EMAIL ME A SIGN-IN LINK"}
           </PrimaryButton>
         </View>
-
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            setMode(mode === "sign-in" ? "sign-up" : "sign-in");
-            setError(null);
-            setMessage(null);
-          }}
-        >
-          <Text style={styles.switch}>{mode === "sign-in" ? "NEW HERE? CREATE AN ACCOUNT" : "ALREADY HAVE AN ACCOUNT? SIGN IN"}</Text>
-        </Pressable>
       </Screen>
     </KeyboardAvoidingView>
   );
@@ -119,5 +97,4 @@ const styles = StyleSheet.create({
   input: { color: colors.text, backgroundColor: colors.panel, borderColor: colors.line, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: 16, paddingVertical: 15, fontSize: 16 },
   error: { color: colors.danger, lineHeight: 20 },
   success: { color: colors.hot, lineHeight: 20 },
-  switch: { color: colors.text, textAlign: "center", fontSize: 11, fontWeight: "900", letterSpacing: 0.7, marginTop: spacing.xl },
 });

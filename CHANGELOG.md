@@ -2,6 +2,20 @@
 
 All notable ProofMode development checkpoints are recorded here.
 
+## [0.7.0] - 2026-08-22
+
+### Added
+- Passwordless email magic-link sign-in using the existing ProofMode app scheme.
+- Cold-start and foreground Supabase auth deep-link session completion.
+- Local Supabase Auth redirect configuration.
+
+### Changed
+- Mobile version advanced to `0.7.0`.
+- Auth UI is now one email field and one sign-in-link action.
+
+### Removed
+- Temporary email/password sign-in and sign-up flow.
+
 ## [0.6.0] - 2026-08-22
 
 ### Added

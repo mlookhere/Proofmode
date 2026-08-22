@@ -27,7 +27,7 @@ The feed must be entertaining enough to open with no intention to post, while ev
 - creator/launch copy and acquisition sequence
 
 ## Execute from the current checkpoint
-1. **Finish mobile auth:** staging verification is complete through migration `006`; implement the plan-required email magic-link fallback, then Apple/Google provider integration and device testing.
+1. **Finish mobile auth:** staging verification is complete through migration `006` and email magic-link auth is implemented; configure/test the hosted redirect, then add Apple/Google provider integration and device testing.
 2. **Challenge actions:** wire Join / Watch and the minimum persisted Explore state.
 3. **Media/Create:** camera/library → signed upload → processing → moderation → publish recovery.
 4. **Social:** reactions, comments, follows, Crew data, report, and block.

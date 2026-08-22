@@ -14,7 +14,7 @@
 - Billing synchronization is explicitly `service_role` only.
 - One mobile Supabase client with persistent AsyncStorage-backed sessions.
 - One root auth/session provider with foreground/background token refresh handling.
-- Email/password remains only a staging bootstrap; release auth follows the master plan: Apple, Google, email magic-link fallback.
+- The plan-required email magic-link fallback is implemented with `proofmode://auth` deep-link session completion; the temporary password bootstrap is removed.
 - Public Home and Explore remain readable while signed out; Post, Crews, and You require a session.
 - Home reads live `get_feed_v1` with pull-to-refresh and deterministic keyset infinite scroll.
 - Explore reads live `challenge_templates`.
@@ -23,12 +23,13 @@
 - Live staging smoke checks verified auth-triggered profile creation and the current schema/security boundary.
 
 ### Present but not fully device-verified
+- Hosted Supabase must allow `proofmode://auth` before physical-device magic-link testing; the local Supabase config already allows it.
 - Universal/App Link configuration exists; hosted association files and device-level tests are still required.
 - Create and Crew screens are authenticated shells; mutations/data are not connected yet.
 - The root web project still lacks a lockfile, so web CI intentionally remains `npm install` until a lockfile can be generated and validated.
 
 ### Not implemented yet
-- Apple / Google sign-in and the plan-required email magic-link fallback.
+- Apple / Google sign-in and provider-side credentials/configuration.
 - Challenge join/watch mutations in the mobile UI.
 - Media capture/upload/processing/moderation/publish recovery.
 - Reactions, comments, follows, live Crew data, report/block.
@@ -36,7 +37,7 @@
 
 ## Execution order from here
 
-1. **Finish auth** — email magic-link fallback/deep-link handling first, then Apple and Google provider integration/configuration and physical-device tests.
+1. **Finish auth** — configure/test the hosted magic-link redirect, then Apple and Google provider integration/configuration and physical-device tests.
 2. **Challenge actions** — join/watch and the minimum persisted state needed by Explore.
 3. **Media/create path** — capture/library, signed upload, processing state, moderation, publish recovery.
 4. **Social actions** — reactions, comments, follows, Crew basics, report/block.

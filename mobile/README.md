@@ -49,7 +49,7 @@ Without Supabase values, Home and Explore use the isolated preview data and auth
 
 - persistent Supabase session using the official JS client and AsyncStorage
 - one root auth/session provider
-- email/password sign-in and sign-up as the current staging bootstrap path; release auth remains Apple/Google + email magic-link fallback
+- email magic-link sign-in with `proofmode://auth` deep-link session completion; Apple/Google provider integration is next
 - public Home and Explore while signed out
 - auth gating for Post, Crews, and You
 - live `get_feed_v1` Home query with pull-to-refresh and keyset infinite scroll

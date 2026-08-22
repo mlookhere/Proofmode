@@ -105,6 +105,18 @@ assert(!ci.includes("supabase db start"), "CI uses obsolete supabase db start");
 assert(ci.includes("supabase db lint --level error --fail-on error"), "CI is missing database linting");
 assert(ci.includes("supabase test db supabase/tests/database supabase/tests/local"), "CI is missing complete database tests");
 
+
+const mobileAuth = await read("mobile/app/auth.tsx");
+const mobileDeepLink = await read("mobile/src/auth/deep-link.ts");
+const mobileSession = await read("mobile/src/auth/session.tsx");
+assert(mobileAuth.includes("signInWithOtp"), "Mobile auth is not using the plan-required email magic-link flow");
+assert(!mobileAuth.includes("signInWithPassword") && !mobileAuth.includes("auth.signUp"), "Password bootstrap auth must not return after magic-link cutover");
+assert(mobileDeepLink.includes('authRedirectUrl = "proofmode://auth"'), "Magic-link callback does not match the app scheme");
+assert(mobileDeepLink.includes("auth.setSession") || mobileDeepLink.includes(".auth.setSession"), "Magic-link callback does not complete the Supabase session");
+assert(mobileSession.includes("Linking.getInitialURL"), "Cold-start auth deep links are not handled");
+assert(mobileSession.includes('Linking.addEventListener("url"'), "Foreground auth deep links are not handled");
+assert(supabaseConfig.includes('additional_redirect_urls = ["proofmode://auth"]'), "Local Supabase auth redirect allowlist is missing");
+
 const envExample = await read("mobile/.env.example");
 for (const key of ["EXPO_PUBLIC_APP_ENV", "EXPO_PUBLIC_SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]) {
   assert(envExample.includes(`${key}=`), `Missing ${key} from mobile/.env.example`);
