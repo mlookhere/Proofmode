@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "ProofMode",
+    "slug": "proofmode",
+    "scheme": "proofmode",
+    "version": "0.5.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "plugins": [
+      "expo-router"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.proofmode.app",
+      "associatedDomains": [
+        "applinks:proofmode.app"
+      ]
+    },
+    "android": {
+      "package": "com.proofmode.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "proofmode.app",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    }
+  }
+}
