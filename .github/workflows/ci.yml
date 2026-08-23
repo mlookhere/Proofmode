@@ -2,8 +2,9 @@ name: ProofMode CI
 
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
   pull_request:
+    branches: [dev, main]
 
 permissions:
   contents: read
@@ -14,6 +15,7 @@ concurrency:
 
 jobs:
   foundation:
+    name: Foundation
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -21,9 +23,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22.13.0
+      - run: node workflow/control-self-test.mjs
       - run: npm run validate:foundation
 
   database:
+    name: Database
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -36,6 +40,7 @@ jobs:
       - run: supabase test db supabase/tests/database supabase/tests/local
 
   mobile:
+    name: Mobile
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -52,6 +57,7 @@ jobs:
       - run: npm run typecheck
 
   web:
+    name: Web
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
