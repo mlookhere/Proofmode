@@ -1,0 +1,27 @@
+name: ProofMode PR guard
+
+on:
+  pull_request_target:
+    branches: [dev, main]
+    types: [opened, reopened, edited, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  metadata:
+    name: PR metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out trusted base branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Validate Issue, branch, PR body, and risk labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node workflow/validate-pr.mjs
