@@ -33,12 +33,12 @@ async function associatedPulls() {
   return [];
 }
 
-async function issueHasType(number, type) {
-  if (!number) return false;
+async function issueLabels(number) {
+  if (!number) return new Set();
   try {
-    return labelsOf(await getIssue(number)).has(type);
+    return labelsOf(await getIssue(number));
   } catch {
-    return false;
+    return new Set();
   }
 }
 
@@ -49,12 +49,9 @@ let explanation = "";
 if (branch === "dev") {
   for (const pr of pulls) {
     const issueNumber = issueFromBranch(pr.head?.ref || "") || issueFromText(pr.body || "");
+    const labels = await issueLabels(issueNumber);
     const validHead = /^(?:work|fix)\/\d+-[a-z0-9][a-z0-9-]*$/.test(pr.head?.ref || "");
-    const validType = await Promise.any([
-      issueHasType(issueNumber, "type:feature"),
-      issueHasType(issueNumber, "type:bug"),
-      issueHasType(issueNumber, "type:maintenance"),
-    ].map(async (value) => value)).catch(() => false);
+    const validType = ["type:feature", "type:bug", "type:maintenance"].some((label) => labels.has(label));
     if (pr.base?.ref === "dev" && validHead && validType) {
       valid = true;
       explanation = `PR #${pr.number} ${pr.head.ref} -> dev`;
@@ -64,7 +61,8 @@ if (branch === "dev") {
 } else {
   for (const pr of pulls) {
     const issueNumber = issueFromText(pr.body || "");
-    if (pr.base?.ref === "main" && pr.head?.ref === "dev" && await issueHasType(issueNumber, "type:release")) {
+    const labels = await issueLabels(issueNumber);
+    if (pr.base?.ref === "main" && pr.head?.ref === "dev" && labels.has("type:release")) {
       valid = true;
       explanation = `release PR #${pr.number} dev -> main`;
       break;
