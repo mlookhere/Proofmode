@@ -25,6 +25,11 @@ for (const trigger of ["issues:", "pull_request_target:", "workflow_run:"]) asse
 assert(sync.includes("node workflow/control-sync.mjs"), "Control Issue synchronization step is missing");
 assert(sync.includes("node workflow/handle-pr-state.mjs"), "PR lifecycle handler is missing");
 
+const controlSync = await read("workflow/control-sync.mjs");
+assert(controlSync.includes("const branchByIssue = new Map()"), "Control sync does not index Issue-backed branches");
+assert(controlSync.includes("branchByIssue.get(issue.number)"), "Control sync does not use pre-PR Issue branch state");
+assert(controlSync.includes("/^(?:work|fix)\\/(\\d+)-"), "Control sync branch discovery does not enforce Issue-backed branch naming");
+
 for (const template of ["task.yml", "bug.yml", "release.yml"]) {
   const body = await read(`.github/ISSUE_TEMPLATE/${template}`);
   assert(body.includes("<!-- state:start -->") && body.includes("<!-- state:end -->"), `${template} is missing managed handoff markers`);
