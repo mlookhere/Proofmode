@@ -1,0 +1,33 @@
+name: Phase / module task
+description: One independently deliverable ProofMode phase, module, or maintenance change
+labels: ["type:feature", "state:ready"]
+body:
+  - type: textarea
+    id: requirement
+    attributes:
+      label: Requirement
+      description: Observable behavior that must exist when this work is complete.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Out of scope
+      description: What this Issue deliberately does not change.
+  - type: textarea
+    id: state
+    attributes:
+      label: Managed handoff state
+      description: Replace this block as work advances. Never append stale session notes below it.
+      value: |
+        <!-- state:start -->
+        _No session state yet._
+        <!-- state:end -->
