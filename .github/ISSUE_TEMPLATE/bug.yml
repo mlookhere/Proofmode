@@ -1,0 +1,37 @@
+name: Bug
+description: Defect or regression to reproduce, fix, verify, and preserve as project history
+labels: ["type:bug", "state:ready"]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Exact failure, error, command, screen, or request.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Smallest repeatable steps and relevant environment/configuration.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Logs, screenshots, failing CI run, affected version/commit, or related Issues.
+  - type: textarea
+    id: state
+    attributes:
+      label: Managed handoff state
+      value: |
+        <!-- state:start -->
+        _No session state yet._
+        <!-- state:end -->
