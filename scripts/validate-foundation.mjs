@@ -20,6 +20,7 @@ assert(
     "004_template_library.sql",
     "005_feed_pagination.sql",
     "006_staging_hardening.sql",
+    "007_client_acl_parity.sql",
   ]),
   `Unexpected migration set: ${migrations.join(", ")}`,
 );
@@ -35,6 +36,12 @@ for (const staleTemplate of ["declutter-10", "desk-reset", "no-doordash", "stair
 assert(hardeningSql.includes("alter function public.is_challenge_member(uuid) set schema private"), "RLS helper is still exposed in public");
 assert(hardeningSql.includes("drop function if exists public.join_public_challenge(text)"), "Legacy join RPC was not removed");
 assert(hardeningSql.includes("to service_role"), "Billing RPC service-role grant is missing");
+
+const clientAclSql = await read("supabase/migrations/007_client_acl_parity.sql");
+assert(clientAclSql.includes("grant select on table public.challenges to anon, authenticated"), "Public challenge read grant is missing");
+assert(clientAclSql.includes("grant select on table public.challenge_members to authenticated"), "Membership read grant is missing");
+assert(clientAclSql.includes("grant select, insert, delete on table public.watched_challenges to authenticated"), "Watch persistence grants are missing");
+assert(clientAclSql.includes("grant select on table public.profiles to authenticated"), "Authenticated profile read grant is missing");
 
 const entertainmentSql = await read("supabase/migrations/003_entertainment_engine.sql");
 assert(entertainmentSql.includes("create or replace function public.get_feed_v1"), "Missing baseline get_feed_v1 feed RPC");
@@ -111,7 +118,7 @@ for (const testFile of [
 }
 
 const ci = await read(".github/workflows/ci.yml");
-assert(ci.includes("supabase/setup-cli@v1"), "CI is missing Supabase CLI setup");
+assert(ci.includes("supabase/setup-cli@v2"), "CI is missing Supabase CLI setup");
 assert(ci.includes("supabase start"), "CI must start the local Supabase stack with supabase start");
 assert(!ci.includes("supabase db start"), "CI uses obsolete supabase db start");
 assert(ci.includes("supabase db lint --level error --fail-on error"), "CI is missing database linting");
