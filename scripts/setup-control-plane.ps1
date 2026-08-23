@@ -43,9 +43,9 @@ if ($control) {
     }
 }
 
-function Protect-Branch([string]$branch) {
+function Protect-Branch([string]$branch, [bool]$strict) {
     $payload = @{
-        required_status_checks = @{ strict = $true; contexts = @("PR metadata", "Foundation", "Database", "Mobile", "Web") }
+        required_status_checks = @{ strict = $strict; contexts = @("PR metadata", "Foundation", "Database", "Mobile", "Web") }
         enforce_admins = $true
         required_pull_request_reviews = @{ required_approving_review_count = 0 }
         restrictions = $null
@@ -57,9 +57,12 @@ function Protect-Branch([string]$branch) {
     $payload | gh api -X PUT "repos/$repo/branches/$branch/protection" --input - | Out-Null
 }
 
-Protect-Branch "dev"
-Protect-Branch "main"
+# Feature/fix branches must be current with dev before integration.
+Protect-Branch "dev" $true
+# dev is intentionally an ancestor of main after each merge-based release. Requiring
+# strict up-to-date status here would force release-only merge metadata back into dev.
+Protect-Branch "main" $false
 
 Write-Host "ProofMode control plane metadata configured."
 Write-Host "Control Issue: #$($control.number)"
-Write-Host "Protected branches: dev, main"
+Write-Host "Protected branches: dev (strict), main (release checks required, non-strict)"
