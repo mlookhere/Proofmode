@@ -116,6 +116,14 @@ for (const pr of pulls) {
   if (number) prByIssue.set(number, pr);
 }
 
+const repositoryBranches = await paginate(`/repos/${repo}/branches`);
+const branchByIssue = new Map();
+for (const branch of repositoryBranches) {
+  const match = branch.name.match(/^(?:work|fix)\/(\d+)-[a-z0-9][a-z0-9-]*$/);
+  const number = Number(match?.[1] || 0);
+  if (number && !branchByIssue.has(number)) branchByIssue.set(number, branch.name);
+}
+
 async function ciSummary(pr) {
   try {
     const checks = await github(`/repos/${repo}/commits/${pr.head.sha}/check-runs?per_page=100`);
@@ -144,7 +152,7 @@ for (const issue of issues) {
     state: states[0] || "state:unlabeled",
     risks: [...labels].filter((label) => label.startsWith("risk:")),
     type: [...labels].find((label) => label.startsWith("type:")) || "type:unlabeled",
-    branch: pr?.head?.ref || null,
+    branch: pr?.head?.ref || branchByIssue.get(issue.number) || null,
     pr: pr ? { number: pr.number, url: pr.html_url, base: pr.base.ref, ci: await ciSummary(pr) } : null,
     handoff: extractManagedState(issue.body || ""),
   };
