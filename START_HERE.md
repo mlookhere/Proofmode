@@ -29,6 +29,7 @@ The feed must be entertaining enough to open with no intention to post, while ev
 - Bugs use a `type:bug` Issue and `fix/<issue>-<slug>` branch into `dev`.
 - Releases use a `type:release` Issue and a `dev → main` PR.
 - The controlling Issue remains open through integration and closes only when its release reaches `main`.
+- Native GitHub branch protection is unavailable on the current private-repository plan. Run `scripts/setup-control-plane.ps1` once per checkout to activate the local pre-push guard; GitHub Actions audits every resulting push to `dev` and `main` and records any bypass as a control violation Issue.
 
 ## Execute from the current checkpoint
 
