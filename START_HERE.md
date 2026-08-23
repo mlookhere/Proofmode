@@ -28,13 +28,12 @@ The feed must be entertaining enough to open with no intention to post, while ev
 
 ## Execute from the current checkpoint
 1. **Finish mobile auth:** staging verification is complete through migration `006` and email magic-link auth is implemented; configure/test the hosted redirect, then add Apple/Google provider integration and device testing.
-2. **Challenge actions:** wire Join / Watch and the minimum persisted Explore state.
-3. **Media/Create:** camera/library → signed upload → processing → moderation → publish recovery.
-4. **Social:** reactions, comments, follows, Crew data, report, and block.
-5. **Proof/Journey/Passport:** verified ledger, streak/reset/comeback rules, history.
-6. **Sharing + push:** canonical links, hosted association files, native share, attribution, then contextual notifications.
-7. **Monetization:** RevenueCat entitlements/paywalls/restore; keep Black private/server-owned.
-8. **Closed alpha:** seed content and small real communities, then fix activation, retention, safety, and media-cost issues before broad launch.
+2. **Media/Create:** camera/library → signed upload → processing → moderation → publish recovery.
+3. **Social:** reactions, comments, follows, Crew data, report, and block.
+4. **Proof/Journey/Passport:** verified ledger, streak/reset/comeback rules, history.
+5. **Sharing + push:** canonical links, hosted association files, native share, attribution, then contextual notifications.
+6. **Monetization:** RevenueCat entitlements/paywalls/restore; keep Black private/server-owned.
+7. **Closed alpha:** seed content and small real communities, then fix activation, retention, safety, and media-cost issues before broad launch.
 
 `docs/DEVELOPMENT_STATUS.md` is the authoritative implementation checkpoint if this sequence changes.
 

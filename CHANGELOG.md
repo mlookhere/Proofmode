@@ -2,6 +2,18 @@
 
 All notable ProofMode development checkpoints are recorded here.
 
+## [0.8.0] - 2026-08-23
+
+### Added
+- Live public Drop discovery in mobile Explore.
+- Public Drop detail route with persisted Join and Watch/Unwatch state.
+- Auth return-route support so a signed-out Join or Watch resumes after magic-link sign-in.
+- pgTAP regression coverage for persisted watch reads and unwatch.
+
+### Changed
+- Mobile version advanced to `0.8.0`.
+- Explore now uses live challenge instances for participation instead of treating templates as joinable Drops.
+
 ## [0.7.0] - 2026-08-22
 
 ### Added

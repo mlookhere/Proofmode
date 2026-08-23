@@ -17,7 +17,7 @@
 - The plan-required email magic-link fallback is implemented with `proofmode://auth` deep-link session completion; the temporary password bootstrap is removed.
 - Public Home and Explore remain readable while signed out; Post, Crews, and You require a session.
 - Home reads live `get_feed_v1` with pull-to-refresh and deterministic keyset infinite scroll.
-- Explore reads live `challenge_templates`.
+- Explore reads live public Drops; public Drop detail supports persisted Join and Watch/Unwatch state.
 - You reads the signed-in profile plus `get_profile_snapshot`.
 - CI covers foundation validation, local Supabase startup, database linting, transactional pgTAP tests, mobile locked install/typecheck, and web typecheck/build.
 - Live staging smoke checks verified auth-triggered profile creation and the current schema/security boundary.
@@ -30,7 +30,6 @@
 
 ### Not implemented yet
 - Apple / Google sign-in and provider-side credentials/configuration.
-- Challenge join/watch mutations in the mobile UI.
 - Media capture/upload/processing/moderation/publish recovery.
 - Reactions, comments, follows, live Crew data, report/block.
 - Sharing/attribution, push, RevenueCat, Sentry, and PostHog.
@@ -38,13 +37,12 @@
 ## Execution order from here
 
 1. **Finish auth** — configure/test the hosted magic-link redirect, then Apple and Google provider integration/configuration and physical-device tests.
-2. **Challenge actions** — join/watch and the minimum persisted state needed by Explore.
-3. **Media/create path** — capture/library, signed upload, processing state, moderation, publish recovery.
-4. **Social actions** — reactions, comments, follows, Crew basics, report/block.
-5. **Journey/proof integration** — proof ledger, streak/reset/comeback behavior, Passport metrics.
-6. **Sharing and attribution** — exact-content links, hosted association files, native share, invite attribution.
-7. **Push and monetization** — notifications/preferences first, then RevenueCat.
-8. **Closed alpha** — seed content, small real communities, activation/retention/safety/media-cost validation.
+2. **Media/create path** — capture/library, signed upload, processing state, moderation, publish recovery.
+3. **Social actions** — reactions, comments, follows, Crew basics, report/block.
+4. **Journey/proof integration** — proof ledger, streak/reset/comeback behavior, Passport metrics.
+5. **Sharing and attribution** — exact-content links, hosted association files, native share, invite attribution.
+6. **Push and monetization** — notifications/preferences first, then RevenueCat.
+7. **Closed alpha** — seed content, small real communities, activation/retention/safety/media-cost validation.
 
 ## DRY / KISS / YAGNI guardrails
 

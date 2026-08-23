@@ -67,3 +67,7 @@ Without Supabase values, Home and Explore use the isolated preview data and auth
 6. sharing/attribution, push, then RevenueCat
 
 Use `npx expo install <package>` for Expo-managed native packages. Keep direct JavaScript-only dependencies pinned in `package.json` and the lockfile.
+
+## Challenge actions
+
+Explore loads live public Drops. Drop detail stays readable while signed out and persists Join plus Watch/Unwatch state after authentication.

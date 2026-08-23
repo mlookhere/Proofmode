@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "expo-router";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { ChallengeTemplate } from "@/domain";
 import { exploreCategories, templates as previewTemplates } from "@/data";
-import { fetchTemplates } from "@/api/templates";
+import { fetchPublicChallenges, type PublicChallenge } from "@/api/challenges";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { colors, radius, spacing } from "@/theme";
 import { Eyebrow, Pill, PrimaryButton, Screen, SectionLabel, Surface } from "@/components/ui";
 
 export default function Explore() {
-  const [templates, setTemplates] = useState<readonly ChallengeTemplate[]>(isSupabaseConfigured ? [] : previewTemplates);
+  const router = useRouter();
+  const [challenges, setChallenges] = useState<readonly PublicChallenge[]>([]);
+  const [templates] = useState<readonly ChallengeTemplate[]>(previewTemplates);
   const [isLoading, setIsLoading] = useState(isSupabaseConfigured);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,9 +21,9 @@ export default function Explore() {
     setError(null);
 
     try {
-      setTemplates(await fetchTemplates());
+      setChallenges(await fetchPublicChallenges());
     } catch {
-      setError("Could not load challenges.");
+      setError("Could not load public Drops.");
     } finally {
       setIsLoading(false);
     }
@@ -43,9 +46,24 @@ export default function Explore() {
       {isLoading ? <ActivityIndicator color={colors.hot} style={styles.loader} /> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {error ? <PrimaryButton onPress={() => void load()} style={styles.retry}>RETRY</PrimaryButton> : null}
-      {!isLoading && !error && templates.length === 0 ? <Text style={styles.empty}>No challenges are published yet.</Text> : null}
+      {!isLoading && !error && isSupabaseConfigured && challenges.length === 0 ? (
+        <Text style={styles.empty}>No public Drops are live yet.</Text>
+      ) : null}
 
-      {!error && templates.map((template) => (
+      {isSupabaseConfigured && !error ? challenges.map((challenge) => (
+        <Surface key={challenge.id} style={styles.card}>
+          <Text style={styles.emoji}>{challenge.coverEmoji ?? "⚡"}</Text>
+          <Text style={styles.title}>{challenge.title.toUpperCase()}</Text>
+          <Text style={styles.promise}>{challenge.tagline ?? challenge.rule}</Text>
+          <View style={styles.meta}>
+            <Text style={styles.metaText}>{challenge.durationDays} DAYS</Text>
+            <Text style={styles.metaText}>{challenge.category.toUpperCase()}</Text>
+          </View>
+          <PrimaryButton onPress={() => router.push(`/challenge/${challenge.slug}`)}>OPEN DROP →</PrimaryButton>
+        </Surface>
+      )) : null}
+
+      {!isSupabaseConfigured ? templates.map((template) => (
         <Surface key={template.id} style={styles.card}>
           <Text style={styles.emoji}>{template.emoji}</Text>
           <Text style={styles.title}>{template.title}</Text>
@@ -55,7 +73,7 @@ export default function Explore() {
           </View>
           <PrimaryButton>JOIN →</PrimaryButton>
         </Surface>
-      ))}
+      )) : null}
     </Screen>
   );
 }

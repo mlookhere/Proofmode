@@ -2,6 +2,10 @@ import { requireSupabase } from "@/lib/supabase";
 
 export const authRedirectUrl = "proofmode://auth";
 
+export function buildAuthRedirectUrl(returnTo?: string) {
+  return returnTo ? `${authRedirectUrl}?returnTo=${encodeURIComponent(returnTo)}` : authRedirectUrl;
+}
+
 function getAuthParam(url: URL, key: string) {
   const fragment = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
   return fragment.get(key) ?? url.searchParams.get(key);

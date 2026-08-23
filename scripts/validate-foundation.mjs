@@ -77,6 +77,18 @@ assert(mobileHome.includes("onEndReached"), "Mobile Home infinite scroll is miss
 const mobileTemplates = await read("mobile/src/api/templates.ts");
 assert(mobileTemplates.includes('.from("challenge_templates")'), "Mobile Explore is not wired to challenge_templates");
 
+const mobileChallenges = await read("mobile/src/api/challenges.ts");
+const mobileExplore = await read("mobile/app/(tabs)/explore.tsx");
+const mobileChallengeRoute = await read("mobile/app/challenge/[slug].tsx");
+assert(mobileChallenges.includes('.from("challenges")'), "Mobile challenge discovery is not wired to live challenges");
+assert(mobileChallenges.includes('rpc("join_challenge_v2"'), "Mobile Join is not wired to join_challenge_v2");
+assert(mobileChallenges.includes('.from("watched_challenges")'), "Mobile Watch is not persisted");
+assert(mobileExplore.includes("fetchPublicChallenges"), "Mobile Explore is not loading public Drops");
+assert(mobileExplore.includes("/challenge/"), "Mobile Explore is not linked to Drop detail");
+assert(mobileChallengeRoute.includes('action=${nextAction}'), "Challenge auth return action is missing");
+assert(mobileChallengeRoute.includes('runAction("join")'), "Challenge Join action is missing");
+assert(mobileChallengeRoute.includes('runAction("watch")'), "Challenge Watch action is missing");
+
 assert(mobileAppConfig?.scheme === "proofmode", "Missing proofmode app scheme");
 assert(mobileAppConfig?.ios?.associatedDomains?.includes("applinks:proofmode.app"), "Missing iOS associated domain");
 assert(mobileAppConfig?.android?.intentFilters?.some((filter) => filter.action === "VIEW"), "Missing Android app-link intent filter");
@@ -112,6 +124,8 @@ const mobileSession = await read("mobile/src/auth/session.tsx");
 assert(mobileAuth.includes("signInWithOtp"), "Mobile auth is not using the plan-required email magic-link flow");
 assert(!mobileAuth.includes("signInWithPassword") && !mobileAuth.includes("auth.signUp"), "Password bootstrap auth must not return after magic-link cutover");
 assert(mobileDeepLink.includes('authRedirectUrl = "proofmode://auth"'), "Magic-link callback does not match the app scheme");
+assert(mobileDeepLink.includes("buildAuthRedirectUrl"), "Auth redirect cannot preserve a requested return route");
+assert(mobileAuth.includes("returnTo"), "Auth screen does not resume the requested route after sign-in");
 assert(mobileDeepLink.includes("auth.setSession") || mobileDeepLink.includes(".auth.setSession"), "Magic-link callback does not complete the Supabase session");
 assert(mobileSession.includes("Linking.getInitialURL"), "Cold-start auth deep links are not handled");
 assert(mobileSession.includes('Linking.addEventListener("url"'), "Foreground auth deep links are not handled");

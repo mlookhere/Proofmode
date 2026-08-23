@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
-import { authRedirectUrl } from "@/auth/deep-link";
+import { buildAuthRedirectUrl } from "@/auth/deep-link";
 import { useAuth } from "@/auth/session";
 import { Eyebrow, PrimaryButton, Screen } from "@/components/ui";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
@@ -9,6 +9,7 @@ import { colors, radius, spacing } from "@/theme";
 
 export default function AuthScreen() {
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const { session, authError, clearAuthError } = useAuth();
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -16,7 +17,7 @@ export default function AuthScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (session) router.replace("/(tabs)/you");
+    if (session) router.replace(returnTo || "/(tabs)/you");
   }, [router, session]);
 
   async function sendMagicLink() {
@@ -34,7 +35,7 @@ export default function AuthScreen() {
     try {
       const { error: signInError } = await requireSupabase().auth.signInWithOtp({
         email: normalizedEmail,
-        options: { emailRedirectTo: authRedirectUrl },
+        options: { emailRedirectTo: buildAuthRedirectUrl(returnTo) },
       });
       if (signInError) throw signInError;
       setMessage("Check your email for your ProofMode sign-in link.");

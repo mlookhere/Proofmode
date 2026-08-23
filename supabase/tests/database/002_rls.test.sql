@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(13);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('10000000-0000-0000-0000-000000000011', 'proofmode-a@example.test', '{"name":"User A"}'::jsonb),
@@ -90,6 +90,19 @@ select throws_ok(
   '42501',
   null,
   'authenticated users cannot write another user watch state'
+);
+
+select is(
+  (select count(*)::int from public.watched_challenges
+   where user_id = '10000000-0000-0000-0000-000000000012'
+     and challenge_id = '20000000-0000-0000-0000-000000000011'),
+  1,
+  'authenticated users can read their persisted watch state'
+);
+
+select lives_ok(
+  $$delete from public.watched_challenges where user_id = '10000000-0000-0000-0000-000000000012' and challenge_id = '20000000-0000-0000-0000-000000000011'$$,
+  'authenticated users can unwatch their own Drop'
 );
 
 select lives_ok(
