@@ -1,33 +1,40 @@
 # START HERE — ProofMode 3.0
 
-If you only read one file first, read this one, then `docs/MASTER_PLAN.md`.
+## Zero-context recovery comes first
 
-For the current implementation checkpoint and the authoritative next development slice, read `docs/DEVELOPMENT_STATUS.md`.
+Before relying on conversation history, open the GitHub Issue titled **`[CONTROL] ProofMode current repository state`**. It is the canonical project handoff and is automatically synchronized from repository/Issue/PR/CI state.
+
+Then:
+
+1. open the active controlling Issue listed there;
+2. read its **Managed handoff state**;
+3. confirm the named branch and PR;
+4. read `docs/DEVELOPMENT_STATUS.md` and `docs/MASTER_PLAN.md` only after the Issue state is understood.
+
+Repository workflow details live in `docs/CONTROL_PLANE.md`.
 
 ## Product north star
+
 **ProofMode is the participation network.**
 
 The feed must be entertaining enough to open with no intention to post, while every strong post offers a doorway into trying something.
 
 `Watch → Try → Post → Verify → Share/Challenge → Recruit → Return`
 
-## What is already in this package
-- existing v2 Drop / proof / verification / Passport foundation
-- ProofTV web reference surface
-- Explore/template web reference surface
-- six-mode Create reference
-- Journey reference
-- Expo SDK 57 five-tab native reference shell
-- v3 social/media/safety schema migration
-- full 60-template starter library
-- 100 seed-content prompts
-- monetization model including invite-only Black
-- architecture/cost plan
-- trust/safety/release/ops plan
-- creator/launch copy and acquisition sequence
+## Branch and Issue rule
+
+- `main` is released/production history.
+- `dev` is the integration branch.
+- New phases/modules use a `type:feature` Issue and `work/<issue>-<slug>` branch into `dev`.
+- Bugs use a `type:bug` Issue and `fix/<issue>-<slug>` branch into `dev`.
+- Releases use a `type:release` Issue and a `dev → main` PR.
+- The controlling Issue remains open through integration and closes only when its release reaches `main`.
 
 ## Execute from the current checkpoint
-1. **Finish mobile auth:** staging verification is complete through migration `006` and email magic-link auth is implemented; configure/test the hosted redirect, then add Apple/Google provider integration and device testing.
+
+The exact checkpoint is synchronized into the control Issue from `docs/DEVELOPMENT_STATUS.md`. At the current baseline:
+
+1. **Auth external gates:** configure/test hosted magic-link redirect, then Apple/Google provider integration and physical-device testing.
 2. **Media/Create:** camera/library → signed upload → processing → moderation → publish recovery.
 3. **Social:** reactions, comments, follows, Crew data, report, and block.
 4. **Proof/Journey/Passport:** verified ledger, streak/reset/comeback rules, history.
@@ -35,10 +42,10 @@ The feed must be entertaining enough to open with no intention to post, while ev
 6. **Monetization:** RevenueCat entitlements/paywalls/restore; keep Black private/server-owned.
 7. **Closed alpha:** seed content and small real communities, then fix activation, retention, safety, and media-cost issues before broad launch.
 
-`docs/DEVELOPMENT_STATUS.md` is the authoritative implementation checkpoint if this sequence changes.
-
 ## Production rule
+
 Do not confuse “viral features” with a viral product. The team earns distribution by making:
+
 1. first session entertaining,
 2. first participation obvious,
 3. first post easy,
@@ -46,4 +53,5 @@ Do not confuse “viral features” with a viral product. The team earns distrib
 5. return visits story-driven.
 
 ## Before public launch
+
 Every P0 box in `docs/QA_RELEASE_CHECKLIST.md` must be complete.

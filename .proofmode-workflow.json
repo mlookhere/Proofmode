@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "branches": {
+    "integration": "dev",
+    "production": "main"
+  },
+  "github": {
+    "control_issue_title": "[CONTROL] ProofMode current repository state",
+    "state_labels": [
+      "state:ready",
+      "state:active",
+      "state:blocked",
+      "state:review",
+      "state:release-ready",
+      "state:shipped"
+    ],
+    "risk_paths": {
+      "risk:ci": [
+        ".github/workflows/**",
+        ".github/ISSUE_TEMPLATE/**",
+        "workflow/**",
+        "scripts/setup-control-plane.ps1",
+        ".proofmode-workflow.json"
+      ],
+      "risk:database": [
+        "supabase/migrations/**",
+        "supabase/tests/**"
+      ],
+      "risk:security": [
+        "**/auth/**",
+        "**/security/**",
+        "SECURITY.md",
+        ".env.example",
+        "mobile/.env.example"
+      ],
+      "risk:deployment": [
+        "infrastructure/**",
+        "vercel.json",
+        "app/api/cron/**",
+        "app/api/webhooks/**"
+      ],
+      "risk:dependencies": [
+        "package.json",
+        "package-lock.json",
+        "mobile/package.json",
+        "mobile/package-lock.json"
+      ]
+    },
+    "required_checks": [
+      "PR metadata",
+      "Foundation",
+      "Database",
+      "Mobile",
+      "Web"
+    ],
+    "expected_owner": "mlookhere",
+    "expected_repository": "Proofmode"
+  },
+  "tracking": {
+    "control_issue_max_active_rows": 30,
+    "handoff_max_chars": 2400,
+    "max_pr_files": 80,
+    "max_pr_changed_lines": 4000
+  }
+}
