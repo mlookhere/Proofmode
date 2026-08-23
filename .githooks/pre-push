@@ -1,0 +1,18 @@
+#!/bin/sh
+
+if [ "${PROOFMODE_ALLOW_DIRECT_PUSH:-0}" = "1" ]; then
+  exit 0
+fi
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/dev)
+      echo "ProofMode policy: direct pushes to ${remote_ref#refs/heads/} are blocked locally." >&2
+      echo "Use an Issue-backed work/fix branch and merge by pull request." >&2
+      echo "Emergency bypass only: set PROOFMODE_ALLOW_DIRECT_PUSH=1 for this command." >&2
+      exit 1
+      ;;
+  esac
+done
+
+exit 0

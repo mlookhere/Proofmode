@@ -18,12 +18,35 @@ for (const check of ["name: Foundation", "name: Database", "name: Mobile", "name
 const guard = await read(".github/workflows/pr-guard.yml");
 assert(guard.includes("pull_request_target"), "PR guard must run from trusted base workflow");
 assert(guard.includes("node workflow/validate-pr.mjs"), "PR guard is not wired to validate-pr.mjs");
-assert(guard.includes("name: PR metadata"), "PR guard check name must remain stable for branch protection");
+assert(guard.includes("name: PR metadata"), "PR guard check name must remain stable");
 
 const sync = await read(".github/workflows/control-sync.yml");
 for (const trigger of ["issues:", "pull_request_target:", "workflow_run:"]) assert(sync.includes(trigger), `Control sync is missing ${trigger}`);
 assert(sync.includes("node workflow/control-sync.mjs"), "Control Issue synchronization step is missing");
 assert(sync.includes("node workflow/handle-pr-state.mjs"), "PR lifecycle handler is missing");
+
+const controlSync = await read("workflow/control-sync.mjs");
+assert(controlSync.includes("const branchByIssue = new Map()"), "Control sync does not index Issue-backed branches");
+assert(controlSync.includes("branchByIssue.get(issue.number)"), "Control sync does not use pre-PR Issue branch state");
+assert(controlSync.includes("/^(?:work|fix)\\/(\\d+)-"), "Control sync branch discovery does not enforce Issue-backed branch naming");
+
+const auditWorkflow = await read(".github/workflows/branch-policy-audit.yml");
+assert(auditWorkflow.includes("branches: [dev, main]"), "Branch policy audit must watch dev and main");
+assert(auditWorkflow.includes("node workflow/audit-branch-push.mjs"), "Branch policy audit script is not wired into Actions");
+assert(auditWorkflow.includes("issues: write"), "Branch policy audit needs permission to record policy violations");
+
+const auditScript = await read("workflow/audit-branch-push.mjs");
+assert(auditScript.includes("[CONTROL VIOLATION] Unauthorized"), "Branch policy audit must create a durable violation Issue");
+assert(auditScript.includes('pr.head?.ref === "dev"'), "Main pushes must be validated as dev-to-main releases");
+assert(auditScript.includes("issueFromBranch"), "Dev pushes must resolve their Issue-backed branch");
+
+const prePush = await read(".githooks/pre-push");
+assert(prePush.includes("refs/heads/main|refs/heads/dev"), "Local pre-push guard must block dev and main");
+assert(prePush.includes("PROOFMODE_ALLOW_DIRECT_PUSH"), "Local pre-push guard must document the emergency bypass");
+
+const setup = await read("scripts/setup-control-plane.ps1");
+assert(setup.includes("git config core.hooksPath .githooks"), "Setup script must activate repository Git hooks");
+assert(setup.includes("soft enforcement is active instead"), "Setup script must accurately report the branch-protection limitation");
 
 for (const template of ["task.yml", "bug.yml", "release.yml"]) {
   const body = await read(`.github/ISSUE_TEMPLATE/${template}`);
@@ -39,5 +62,6 @@ assert(startHere.includes("work/<issue>-<slug>") && startHere.includes("fix/<iss
 
 const docs = await read("docs/CONTROL_PLANE.md");
 assert(docs.includes("Conversation history is never the canonical source"), "Control-plane documentation must define repository truth");
+assert(docs.includes("Soft branch enforcement"), "Control-plane documentation must describe the no-Pro soft enforcement model");
 
 console.log("ProofMode control-plane validation passed.");
