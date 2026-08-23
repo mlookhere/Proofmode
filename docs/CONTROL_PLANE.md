@@ -20,6 +20,29 @@ The control Issue is synchronized automatically after Issue lifecycle changes, P
 
 New product work and fixes merge to `dev`. A release Issue controls the `dev -> main` PR.
 
+## Soft branch enforcement
+
+Native GitHub protected branches are unavailable while this repository is private on the current GitHub plan. ProofMode therefore uses compensating controls rather than pretending `dev` and `main` are protected.
+
+- `scripts/setup-control-plane.ps1` activates the repository-owned `.githooks/pre-push` hook.
+- The pre-push hook rejects local direct pushes to `dev` and `main`.
+- `.github/workflows/branch-policy-audit.yml` runs after every push to `dev` or `main`.
+- A `dev` push is valid only when GitHub associates it with a merged PR targeting `dev` from an Issue-backed `work/` or `fix/` branch whose controlling Issue has an allowed work type.
+- A `main` push is valid only when GitHub associates it with a merged `dev -> main` PR controlled by a `type:release` Issue.
+- An unrecognized push fails the audit and creates or updates a durable `[CONTROL VIOLATION]` maintenance Issue so the canonical control Issue surfaces the bypass.
+
+This cannot stop an intentional server-side bypass before the commit lands. It prevents normal accidental local pushes and makes any remote bypass immediately visible and durable. The normal workflow remains Issues -> work/fix branch -> PR -> CI -> `dev` -> release Issue -> `main`.
+
+An emergency local bypass exists only for recovery work:
+
+```powershell
+$env:PROOFMODE_ALLOW_DIRECT_PUSH = "1"
+git push ...
+Remove-Item Env:PROOFMODE_ALLOW_DIRECT_PUSH
+```
+
+Use it only when the repository is already being repaired and record the reason in the controlling maintenance Issue.
+
 ## Issue model
 
 ### Phase/module task
