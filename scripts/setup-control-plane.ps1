@@ -7,7 +7,16 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     throw "GitHub CLI (gh) is required."
 }
 
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    throw "Git is required."
+}
+
 gh auth status
+
+git rev-parse --is-inside-work-tree | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Run this script from inside the ProofMode Git checkout."
+}
 
 $labels = @(
     @{ Name = "type:bug"; Color = "d73a4a"; Description = "Defect or regression" },
@@ -43,23 +52,13 @@ if ($control) {
     }
 }
 
-function Protect-Branch([string]$branch) {
-    $payload = @{
-        required_status_checks = @{ strict = $true; contexts = @("PR metadata", "Foundation", "Database", "Mobile", "Web") }
-        enforce_admins = $true
-        required_pull_request_reviews = @{ required_approving_review_count = 0 }
-        restrictions = $null
-        allow_force_pushes = $false
-        allow_deletions = $false
-        required_conversation_resolution = $true
-    } | ConvertTo-Json -Depth 5 -Compress
-
-    $payload | gh api -X PUT "repos/$repo/branches/$branch/protection" --input - | Out-Null
+git config core.hooksPath .githooks
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not configure the ProofMode Git hooks path."
 }
-
-Protect-Branch "dev"
-Protect-Branch "main"
 
 Write-Host "ProofMode control plane metadata configured."
 Write-Host "Control Issue: #$($control.number)"
-Write-Host "Protected branches: dev, main"
+Write-Host "Local direct-push guard: enabled for dev and main"
+Write-Host "Server-side branch policy audit: provided by GitHub Actions"
+Write-Host "Native GitHub branch protection: unavailable for this private repository on the current plan; soft enforcement is active instead."
