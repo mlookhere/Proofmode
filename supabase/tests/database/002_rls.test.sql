@@ -32,15 +32,17 @@ select is(
 );
 
 select is(
-  (select count(*)::int from public.posts where id in (
-    '30000000-0000-0000-0000-000000000011',
-    '30000000-0000-0000-0000-000000000012',
-    '30000000-0000-0000-0000-000000000013',
-    '30000000-0000-0000-0000-000000000014',
-    '30000000-0000-0000-0000-000000000015'
-  )),
+  (select count(*)::int
+   from public.get_feed_v1(20, null, null, null)
+   where post_id in (
+     '30000000-0000-0000-0000-000000000011',
+     '30000000-0000-0000-0000-000000000012',
+     '30000000-0000-0000-0000-000000000013',
+     '30000000-0000-0000-0000-000000000014',
+     '30000000-0000-0000-0000-000000000015'
+   )),
   3,
-  'anonymous post reads expose only public approved published posts'
+  'anonymous feed reads expose only public approved published posts'
 );
 
 select throws_ok(
