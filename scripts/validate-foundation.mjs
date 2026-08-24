@@ -21,6 +21,8 @@ assert(JSON.stringify(migrations) === JSON.stringify([
   "007_client_acl_parity.sql",
   "008_media_post_lifecycle.sql",
   "009_feed_publication_time_guard.sql",
+  "010_social_actions.sql",
+  "011_social_unblock_visibility.sql",
 ]), `Unexpected migration set: ${migrations.join(", ")}`);
 
 const templatesSql = await read("supabase/migrations/004_template_library.sql");
@@ -67,6 +69,40 @@ assert(publicationGuardSql.includes("order by r.score desc, r.published_at desc,
 for (const cursorPart of ["cursor_score", "cursor_time", "cursor_post_id"]) assert(publicationGuardSql.includes(cursorPart), `Publication guard is missing ${cursorPart}`);
 assert(!publicationGuardSql.includes("now() - p.published_at"), "Publication guard must preserve deterministic feed score");
 
+const socialSql = await read("supabase/migrations/010_social_actions.sql");
+for (const required of [
+  "create table if not exists public.crew_messages",
+  "public.set_follow_v1",
+  "public.set_post_reaction_v1",
+  "public.create_comment_v1",
+  "public.delete_comment_v1",
+  "public.set_block_v1",
+  "public.submit_report_v1",
+  "public.get_post_comments_v1",
+  "public.get_my_crews_v1",
+  "public.get_crew_room_v1",
+  "public.post_crew_message_v1",
+  "public.delete_crew_message_v1",
+  "public.create_crew_invite_v1",
+  "viewer_follows",
+  "viewer_reaction",
+  "and p.published_at <= now()",
+  "private.is_blocked_pair",
+  "private.can_view_post",
+]) assert(socialSql.includes(required), `Social migration is missing: ${required}`);
+for (const reaction of ["proven", "respect", "lol", "run_it_back", "im_next"]) {
+  assert(socialSql.includes(`'${reaction}'`), `Social migration is missing reaction: ${reaction}`);
+}
+for (const cursorPart of ["cursor_score", "cursor_time", "cursor_post_id"]) assert(socialSql.includes(cursorPart), `Social feed override is missing ${cursorPart}`);
+assert(socialSql.includes("order by r.score desc, r.published_at desc, r.post_id desc"), "Social feed override changed cursor ordering");
+assert(!socialSql.includes("now() - p.published_at"), "Social feed override must preserve deterministic score");
+
+const unblockSql = await read("supabase/migrations/011_social_unblock_visibility.sql");
+assert(unblockSql.includes("public.get_my_blocks_v1"), "Blocked-user read RPC is missing");
+for (const table of ["follows", "post_reactions", "comments", "blocks", "reports", "crew_messages"]) {
+  assert(unblockSql.includes(`revoke insert, update, delete on table public.${table} from anon, authenticated`), `Social writes are not RPC-only for ${table}`);
+}
+
 const mobilePackage = JSON.parse(await read("mobile/package.json"));
 const mobileLock = JSON.parse(await read("mobile/package-lock.json"));
 const mobileAppConfig = JSON.parse(await read("mobile/app.json")).expo;
@@ -99,14 +135,49 @@ assert(rootLayout.includes("<AuthProvider>"), "Mobile root is missing AuthProvid
 const mobileFeed = await read("mobile/src/api/feed.ts");
 assert(mobileFeed.includes('rpc("get_feed_v1"') && mobileFeed.includes("cursor_post_id"), "Mobile feed pagination contract is incomplete");
 assert(mobileFeed.includes("media_public_url") && mobileFeed.includes("media_kind"), "Mobile feed ignores published media");
+assert(mobileFeed.includes("viewer_follows") && mobileFeed.includes("viewer_reaction"), "Mobile feed ignores social viewer state");
 const mobileHome = await read("mobile/app/(tabs)/index.tsx");
 assert(mobileHome.includes("onEndReached"), "Mobile Home infinite scroll is missing");
 assert(mobileHome.includes("onViewableItemsChanged") && mobileHome.includes("activePostId"), "Home does not pause off-screen video");
 assert(mobileHome.includes("useFocusEffect") && mobileHome.includes("feedFocused && activePostId"), "Home video can continue playing while the tab is blurred");
 assert(mobileHome.includes('media?.kind === "video"'), "Home viewability should only activate visible video posts");
+assert(mobileHome.includes("hideBlockedUser"), "Home does not remove a newly blocked author");
 const feedCard = await read("mobile/src/components/feed-card.tsx");
 assert(feedCard.includes("VideoView") && feedCard.includes("useVideoPlayer"), "Feed card does not render video");
 assert(feedCard.includes("<Image"), "Feed card does not render images");
+assert(feedCard.includes("setFollow") && feedCard.includes("PostSocialModal"), "Feed card social actions are incomplete");
+
+const mobileSocial = await read("mobile/src/api/social.ts");
+for (const rpc of [
+  "set_follow_v1",
+  "set_post_reaction_v1",
+  "get_post_comments_v1",
+  "create_comment_v1",
+  "delete_comment_v1",
+  "set_block_v1",
+  "submit_report_v1",
+  "get_my_crews_v1",
+  "get_crew_room_v1",
+  "post_crew_message_v1",
+  "delete_crew_message_v1",
+  "create_crew_invite_v1",
+  "get_my_blocks_v1",
+]) assert(mobileSocial.includes(`\"${rpc}\"`), `Mobile social API is missing ${rpc}`);
+const postSocialModal = await read("mobile/src/components/post-social-modal.tsx");
+assert(postSocialModal.includes("reactionKinds.map") && postSocialModal.includes("fetchPostComments"), "Post social modal is incomplete");
+assert(postSocialModal.includes('openReport("comment"') && postSocialModal.includes('openReport("post"') && postSocialModal.includes('openReport("user"'), "Post/comment/user reporting is incomplete");
+assert(postSocialModal.includes("setBlock") && postSocialModal.includes("BLOCK USER"), "Post social modal is missing block action");
+const reportModal = await read("mobile/src/components/report-modal.tsx");
+assert(reportModal.includes("reportReasons.map") && reportModal.includes("submitReport"), "Report reason picker is incomplete");
+
+const mobileCrews = await read("mobile/app/(tabs)/crews.tsx");
+const mobileCrewRoom = await read("mobile/app/crew/[id].tsx");
+assert(mobileCrews.includes("fetchMyCrews") && mobileCrews.includes("/crew/"), "Crews tab is not backed by live rooms");
+for (const required of ["fetchCrewRoom", "postCrewMessage", "deleteCrewMessage", "createCrewInvite", "leaderboard", "recent_activity", "messages"]) {
+  assert(mobileCrewRoom.includes(required), `Crew room is missing: ${required}`);
+}
+const mobileYou = await read("mobile/app/(tabs)/you.tsx");
+assert(mobileYou.includes("fetchMyBlocks") && mobileYou.includes("UNBLOCK") && mobileYou.includes("setBlock"), "Blocked-user management is incomplete");
 
 const mobileChallenges = await read("mobile/src/api/challenges.ts");
 const mobileExplore = await read("mobile/app/(tabs)/explore.tsx");
@@ -116,6 +187,7 @@ assert(mobileChallenges.includes('rpc("join_challenge_v2"'), "Mobile Join is not
 assert(mobileChallenges.includes("fetchJoinedPublicChallenges"), "Create cannot list joined public Drops");
 assert(mobileExplore.includes("fetchPublicChallenges") && mobileExplore.includes("/challenge/"), "Explore is not linked to live Drop detail");
 assert(mobileChallengeRoute.includes('runAction("join")') && mobileChallengeRoute.includes('runAction("watch")'), "Challenge actions are incomplete");
+assert(mobileChallengeRoute.includes("ReportModal") && mobileChallengeRoute.includes("REPORT DROP"), "Drop reporting is incomplete");
 
 const mobileCreate = await read("mobile/app/(tabs)/create.tsx");
 for (const required of ["launchCameraAsync", "launchImageLibraryAsync", "MAX_VIDEO_SECONDS", "loadPendingUpload", "retryPendingUpload", "POST PROOF"]) {
@@ -171,6 +243,7 @@ for (const testFile of [
   "supabase/tests/database/002_rls.test.sql",
   "supabase/tests/database/003_security_hardening.test.sql",
   "supabase/tests/database/004_media_lifecycle.test.sql",
+  "supabase/tests/database/005_social_actions.test.sql",
   "supabase/tests/local/003_feed_pagination.test.sql",
 ]) {
   const sql = await read(testFile);
