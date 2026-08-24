@@ -17,6 +17,7 @@ import {
 } from "@/lib/media/server";
 
 const POST_KINDS = new Set(["proof", "fail", "almost", "comeback", "pr", "reset"]);
+const RECOVERABLE_MEDIA_STATES = new Set(["pending", "uploading", "failed"]);
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -42,14 +43,20 @@ function numberOrNull(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function positiveNumberOrNull(value: unknown, field: string) {
+  const parsed = numberOrNull(value);
+  if (parsed !== null && parsed <= 0) throw new MediaApiError(400, `${field} must be positive`);
+  return parsed;
+}
+
 function validateBody(body: IntentBody) {
   const challengeId = typeof body.challengeId === "string" ? body.challengeId : "";
   const kind = typeof body.kind === "string" ? body.kind : "";
   const mediaKind = body.mediaKind === "image" || body.mediaKind === "video" ? body.mediaKind : "";
   const mimeType = typeof body.mimeType === "string" ? body.mimeType.toLowerCase() : "";
   const bytes = numberOrNull(body.bytes);
-  const width = numberOrNull(body.width);
-  const height = numberOrNull(body.height);
+  const width = positiveNumberOrNull(body.width, "width");
+  const height = positiveNumberOrNull(body.height, "height");
   const durationSeconds = numberOrNull(body.durationSeconds);
   const caption = typeof body.caption === "string" ? body.caption.trim() : "";
   const resumeMediaId = typeof body.resumeMediaId === "string" ? body.resumeMediaId : null;
@@ -84,11 +91,14 @@ export async function POST(request: Request) {
     if (input.resumeMediaId) {
       const { data: asset, error } = await admin
         .from("media_assets")
-        .select("id, owner_id, provider, media_kind, storage_key, playback_id, mime_type")
+        .select("id, owner_id, provider, media_kind, storage_key, playback_id, mime_type, processing_status")
         .eq("id", input.resumeMediaId)
         .maybeSingle();
       if (error) throw error;
       if (!asset || asset.owner_id !== user.id) throw new MediaApiError(404, "Upload not found");
+      if (!RECOVERABLE_MEDIA_STATES.has(asset.processing_status)) {
+        throw new MediaApiError(409, "Upload is no longer in a retryable state");
+      }
       if (asset.media_kind !== input.mediaKind || asset.mime_type !== input.mimeType) {
         throw new MediaApiError(409, "Selected media does not match the interrupted upload");
       }
@@ -102,7 +112,12 @@ export async function POST(request: Request) {
       if (!post || post.challenge_id !== input.challengeId) throw new MediaApiError(409, "Upload Drop changed; discard it and start again");
 
       if (asset.provider === "r2" && asset.storage_key) {
-        await admin.from("media_assets").update({ processing_status: "uploading" }).eq("id", asset.id);
+        const { error: updateError } = await admin
+          .from("media_assets")
+          .update({ processing_status: "uploading" })
+          .eq("id", asset.id)
+          .eq("owner_id", user.id);
+        if (updateError) throw updateError;
         return Response.json({
           mediaId: asset.id,
           postId: post.id,
@@ -121,8 +136,13 @@ export async function POST(request: Request) {
           .update({ playback_id: direct.uid, processing_status: "uploading" })
           .eq("id", asset.id)
           .eq("owner_id", user.id);
-        if (updateError) throw updateError;
-        if (previousUid) void deleteProviderAsset({ provider: "stream", storage_key: null, playback_id: previousUid }).catch(console.error);
+        if (updateError) {
+          await deleteProviderAsset({ provider: "stream", storage_key: null, playback_id: direct.uid }).catch(console.error);
+          throw updateError;
+        }
+        if (previousUid) {
+          await deleteProviderAsset({ provider: "stream", storage_key: null, playback_id: previousUid }).catch(console.error);
+        }
         return Response.json({
           mediaId: asset.id,
           postId: post.id,
