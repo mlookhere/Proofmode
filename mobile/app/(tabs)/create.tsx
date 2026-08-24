@@ -84,6 +84,7 @@ function completionMessage(status: string) {
 
 export default function Create() {
   const { session, isLoading } = useAuth();
+  const userId = session?.user.id ?? null;
   const [mode, setMode] = useState<PostMode["title"]>("proof");
   const [challenges, setChallenges] = useState<readonly PublicChallenge[]>([]);
   const [challengeId, setChallengeId] = useState("");
@@ -97,20 +98,32 @@ export default function Create() {
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session) return;
+    if (!userId) return;
     let active = true;
+    setChallenges([]);
+    setChallengeId("");
+    setCaption("");
+    setMedia((current) => {
+      if (current) void removePersistedMedia(current.uri);
+      return null;
+    });
+    setPending(null);
+    setProgress(0);
+    setError(null);
+    setStatus(null);
     setLoadingChallenges(true);
-    Promise.all([fetchJoinedPublicChallenges(session.user.id), loadPendingUpload()])
+
+    Promise.all([fetchJoinedPublicChallenges(userId), loadPendingUpload()])
       .then(([joined, interrupted]) => {
         if (!active) return;
         setChallenges(joined);
-        setChallengeId((current) => current || joined[0]?.id || "");
+        setChallengeId(joined[0]?.id || "");
         setPending(interrupted);
       })
       .catch((cause) => active && setError(cause instanceof Error ? cause.message : "Could not load posting options."))
       .finally(() => active && setLoadingChallenges(false));
     return () => { active = false; };
-  }, [session]);
+  }, [userId]);
 
   if (isLoading) return <Screen />;
   if (!session) return <AuthRequired title="POST YOUR PROOF." message="Sign in when you are ready to publish. Browsing stays open without an account." />;
