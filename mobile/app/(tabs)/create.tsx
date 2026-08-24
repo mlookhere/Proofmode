@@ -349,6 +349,6 @@ const styles = StyleSheet.create({
   status: { color: colors.hot, lineHeight: 20, marginTop: spacing.md, fontWeight: "800" },
   recovery: { backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.orange, borderRadius: radius.lg, padding: 16, marginBottom: spacing.lg },
   progressTrack: { height: 34, marginTop: spacing.md, borderRadius: radius.pill, overflow: "hidden", backgroundColor: colors.panel2, justifyContent: "center" },
-  progressFill: { ...StyleSheet.absoluteFillObject, right: undefined, backgroundColor: colors.hot },
+  progressFill: { position: "absolute", top: 0, bottom: 0, left: 0, backgroundColor: colors.hot },
   progressText: { color: colors.text, textAlign: "center", fontWeight: "900", fontSize: 11 },
 });
