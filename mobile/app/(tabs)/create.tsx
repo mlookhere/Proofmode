@@ -11,6 +11,7 @@ import {
   createResetToken,
   createUploadIntent,
   discardPendingUpload,
+  discardUploadIntent,
   finalizeUpload,
   loadPendingUpload,
   persistSelectedMedia,
@@ -171,7 +172,12 @@ export default function Create() {
     let interrupted: PendingUpload | null = null;
     try {
       const intent = await createUploadIntent(draft);
-      interrupted = await savePendingUpload(draft, intent);
+      try {
+        interrupted = await savePendingUpload(draft, intent);
+      } catch (cause) {
+        await discardUploadIntent(intent.mediaId).catch(() => undefined);
+        throw cause;
+      }
       setPending(interrupted);
       await uploadToProvider(media, intent, setProgress);
       const result = await finalizeUpload(intent.mediaId);
