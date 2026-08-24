@@ -85,6 +85,7 @@ select is(
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"10000000-0000-0000-0000-000000000041","role":"authenticated"}', true);
 select ok(public.assign_post_journey_v1('30000000-0000-0000-0000-000000000041', null) is not null, 'ordinary post receives a Journey');
+reset role;
 select is(
   (select p.journey_id from public.posts p where p.id = '30000000-0000-0000-0000-000000000041'),
   (select j.id from public.journeys j where j.user_id = '10000000-0000-0000-0000-000000000041' and j.challenge_id = '20000000-0000-0000-0000-000000000041' and j.attempt_no = 1),
@@ -95,7 +96,6 @@ select is(
   1,
   'ordinary assignment leaves exactly one active attempt'
 );
-reset role;
 
 create or replace function public.test_reject_journey_link()
 returns trigger language plpgsql set search_path = '' as $$
@@ -115,6 +115,7 @@ select throws_like(
   '%forced link failure%',
   'forced post-link failure aborts Reset assignment'
 );
+reset role;
 select is(
   (select count(*)::int from public.journeys j where j.user_id = '10000000-0000-0000-0000-000000000041' and j.challenge_id = '20000000-0000-0000-0000-000000000041'),
   1,
@@ -130,7 +131,6 @@ select is(
   null::uuid,
   'failed Reset post remains unlinked'
 );
-reset role;
 
 drop trigger test_reject_journey_link on public.posts;
 drop function public.test_reject_journey_link();
@@ -138,6 +138,7 @@ drop function public.test_reject_journey_link();
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"10000000-0000-0000-0000-000000000041","role":"authenticated"}', true);
 select ok(public.assign_post_journey_v1('30000000-0000-0000-0000-000000000043', 'reset-success-0001') is not null, 'successful Reset creates the next attempt');
+reset role;
 select is(
   (select status from public.journeys j where j.user_id = '10000000-0000-0000-0000-000000000041' and j.challenge_id = '20000000-0000-0000-0000-000000000041' and j.attempt_no = 1),
   'ended',
@@ -153,25 +154,29 @@ select is(
   (select j.id from public.journeys j where j.user_id = '10000000-0000-0000-0000-000000000041' and j.challenge_id = '20000000-0000-0000-0000-000000000041' and j.attempt_no = 2),
   'successful Reset post links to attempt two'
 );
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"10000000-0000-0000-0000-000000000041","role":"authenticated"}', true);
 select is(
   public.assign_post_journey_v1('30000000-0000-0000-0000-000000000043', 'reset-success-0001'),
-  (select j.id from public.journeys j where j.user_id = '10000000-0000-0000-0000-000000000041' and j.challenge_id = '20000000-0000-0000-0000-000000000041' and j.attempt_no = 2),
+  (select id from public.journeys where user_id = '10000000-0000-0000-0000-000000000041' and challenge_id = '20000000-0000-0000-0000-000000000041' and attempt_no = 2),
   'post Journey assignment retry is idempotent'
 );
+reset role;
 select is(
   (select count(*)::int from public.journeys j where j.user_id = '10000000-0000-0000-0000-000000000041' and j.challenge_id = '20000000-0000-0000-0000-000000000041'),
   2,
   'Reset retry cannot manufacture another attempt'
 );
 
+set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"10000000-0000-0000-0000-000000000052","role":"authenticated"}', true);
 select is(public.join_challenge_v2('black-capacity-drop', null), '20000000-0000-0000-0000-000000000051'::uuid, 'Black-owned Drop accepts member six');
+reset role;
 select is(
   (select count(*)::int from public.challenge_members where challenge_id = '20000000-0000-0000-0000-000000000051'),
   6,
   'Black capacity is not capped at the free five-member limit'
 );
-reset role;
 
 select ok(
   has_function_privilege('anon', 'public.get_feed_v1(integer,numeric,timestamp with time zone,uuid)', 'EXECUTE')
