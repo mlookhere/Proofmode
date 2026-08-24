@@ -1,0 +1,65 @@
+name: Temporary Dependency Audit
+
+on:
+  push:
+    branches: [work/16-lock-audit-root-dependencies]
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.13.0
+      - name: Generate root lockfile
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Capture dependency audit evidence
+        shell: bash
+        run: |
+          set -u
+          {
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo "root_package=proofmode@$(node -p \"require('./package.json').version\")"
+            echo "mobile_package=proofmode-mobile@$(node -p \"require('./mobile/package.json').version\")"
+          } > dependency-environment.txt
+          npm audit --json > root-audit.json || true
+          npm audit --omit=dev --json > root-audit-production.json || true
+          (
+            cd mobile
+            npm audit --json > ../mobile-audit.json || true
+            npm audit --omit=dev --json > ../mobile-audit-production.json || true
+            npm ls uuid --all --json > ../mobile-uuid-tree.json || true
+          )
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-evidence
+          path: |
+            package-lock.json
+            dependency-environment.txt
+            root-audit.json
+            root-audit-production.json
+            mobile-audit.json
+            mobile-audit-production.json
+            mobile-uuid-tree.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Commit generated root lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "Root lockfile already current."
+            exit 0
+          fi
+          git commit -m "chore(deps): lock root web dependencies"
+          git push origin HEAD:work/16-lock-audit-root-dependencies
