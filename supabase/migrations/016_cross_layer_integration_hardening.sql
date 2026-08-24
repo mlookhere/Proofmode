@@ -25,7 +25,7 @@ declare
   post_kind text;
   post_status text;
   current_journey uuid;
-  journey_id uuid;
+  assigned_journey_id uuid;
 begin
   if actor_id is null then raise exception 'authentication required'; end if;
 
@@ -53,19 +53,19 @@ begin
   end if;
 
   if post_kind = 'reset' then
-    journey_id := private.reset_journey_v1(post_challenge, request_token);
+    assigned_journey_id := private.reset_journey_v1(post_challenge, request_token);
   else
-    journey_id := private.ensure_journey_v1(post_challenge);
+    assigned_journey_id := private.ensure_journey_v1(post_challenge);
   end if;
 
   update public.posts p
-  set journey_id = journey_id, updated_at = now()
+  set journey_id = assigned_journey_id, updated_at = now()
   where p.id = target_post
     and p.user_id = actor_id
     and p.journey_id is null;
 
   if not found then raise exception 'post Journey changed; retry'; end if;
-  return journey_id;
+  return assigned_journey_id;
 end;
 $$;
 
