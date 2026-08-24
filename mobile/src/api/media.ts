@@ -4,7 +4,8 @@ import { requireApiUrl } from "@/config/env";
 import type { PostMode } from "@/domain";
 import { requireSupabase } from "@/lib/supabase";
 
-const PENDING_UPLOAD_KEY = "proofmode.pending-media-upload.v1";
+const PENDING_UPLOAD_PREFIX = "proofmode.pending-media-upload.v2";
+const LEGACY_PENDING_UPLOAD_KEY = "proofmode.pending-media-upload.v1";
 
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
@@ -31,7 +32,8 @@ export type UploadDraft = Readonly<{
 }>;
 
 export type PendingUpload = Readonly<{
-  version: 1;
+  version: 2;
+  userId: string;
   mediaId: string;
   postId: string;
   challengeId: string;
@@ -54,11 +56,19 @@ function pendingDirectory() {
   return `${FileSystem.documentDirectory}proofmode-pending/`;
 }
 
-async function accessToken() {
+function pendingUploadKey(userId: string) {
+  return `${PENDING_UPLOAD_PREFIX}.${userId}`;
+}
+
+async function session() {
   const { data, error } = await requireSupabase().auth.getSession();
   if (error) throw error;
-  if (!data.session?.access_token) throw new Error("Sign in again before uploading.");
-  return data.session.access_token;
+  if (!data.session) throw new Error("Sign in again before uploading.");
+  return data.session;
+}
+
+async function accessToken() {
+  return (await session()).access_token;
 }
 
 async function api(path: string, init: RequestInit = {}) {
@@ -122,8 +132,10 @@ export async function createUploadIntent(draft: UploadDraft, resumeMediaId: stri
 }
 
 export async function savePendingUpload(draft: UploadDraft, intent: UploadIntent) {
+  const userId = (await session()).user.id;
   const pending: PendingUpload = {
-    version: 1,
+    version: 2,
+    userId,
     mediaId: intent.mediaId,
     postId: intent.postId,
     challengeId: draft.challengeId,
@@ -131,30 +143,43 @@ export async function savePendingUpload(draft: UploadDraft, intent: UploadIntent
     caption: draft.caption,
     media: draft.media,
   };
-  await AsyncStorage.setItem(PENDING_UPLOAD_KEY, JSON.stringify(pending));
+  await AsyncStorage.setItem(pendingUploadKey(userId), JSON.stringify(pending));
   return pending;
 }
 
 export async function loadPendingUpload(): Promise<PendingUpload | null> {
-  const raw = await AsyncStorage.getItem(PENDING_UPLOAD_KEY);
+  const userId = (await session()).user.id;
+  const legacy = await AsyncStorage.getItem(LEGACY_PENDING_UPLOAD_KEY);
+  if (legacy) {
+    try {
+      const parsed = JSON.parse(legacy) as { media?: { uri?: string } };
+      if (parsed.media?.uri) await removePersistedMedia(parsed.media.uri);
+    } catch {
+      // Invalid unreleased v1 state can be discarded safely.
+    }
+    await AsyncStorage.removeItem(LEGACY_PENDING_UPLOAD_KEY);
+  }
+
+  const key = pendingUploadKey(userId);
+  const raw = await AsyncStorage.getItem(key);
   if (!raw) return null;
   try {
     const pending = JSON.parse(raw) as PendingUpload;
-    if (pending.version !== 1 || !pending.mediaId || !pending.media?.uri) throw new Error("invalid");
+    if (pending.version !== 2 || pending.userId !== userId || !pending.mediaId || !pending.media?.uri) throw new Error("invalid");
     const info = await FileSystem.getInfoAsync(pending.media.uri);
     if (!info.exists) {
-      await AsyncStorage.removeItem(PENDING_UPLOAD_KEY);
+      await AsyncStorage.removeItem(key);
       return null;
     }
     return pending;
   } catch {
-    await AsyncStorage.removeItem(PENDING_UPLOAD_KEY);
+    await AsyncStorage.removeItem(key);
     return null;
   }
 }
 
 export async function clearPendingUpload(pending: PendingUpload) {
-  await AsyncStorage.removeItem(PENDING_UPLOAD_KEY);
+  await AsyncStorage.removeItem(pendingUploadKey(pending.userId));
   await removePersistedMedia(pending.media.uri);
 }
 
@@ -198,6 +223,8 @@ export async function finalizeUpload(mediaId: string) {
 }
 
 export async function retryPendingUpload(pending: PendingUpload, onProgress: (progress: number) => void) {
+  const currentUserId = (await session()).user.id;
+  if (pending.userId !== currentUserId) throw new Error("This interrupted upload belongs to a different account.");
   const draft: UploadDraft = {
     challengeId: pending.challengeId,
     kind: pending.kind,
@@ -210,6 +237,8 @@ export async function retryPendingUpload(pending: PendingUpload, onProgress: (pr
 }
 
 export async function discardPendingUpload(pending: PendingUpload) {
+  const currentUserId = (await session()).user.id;
+  if (pending.userId !== currentUserId) throw new Error("This interrupted upload belongs to a different account.");
   await api(`/api/media/assets/${encodeURIComponent(pending.mediaId)}`, { method: "DELETE" });
   await clearPendingUpload(pending);
 }
