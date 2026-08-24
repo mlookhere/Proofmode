@@ -103,6 +103,7 @@ The mobile findings therefore remain an **upstream Expo toolchain dependency con
 - Root Web CI uses `npm ci --ignore-scripts` and keys npm cache state from `package-lock.json`.
 - Mobile CI continues to use its existing committed lockfile and `npm ci`.
 - Foundation validation checks root manifest/lock parity, the audited Next/PostCSS/sharp security floors, the TypeScript 6 compatibility pin, locked Web CI, and absence of the temporary audit workflow.
+- The final review diff remains below the configured 80-file / 4,000-changed-line large-change thresholds, so `risk:large-change` is not applicable.
 
 ## Current result
 
