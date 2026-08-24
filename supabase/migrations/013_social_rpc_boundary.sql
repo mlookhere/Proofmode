@@ -15,6 +15,69 @@ alter function public.delete_crew_message_v1(uuid) set schema private;
 alter function public.create_crew_invite_v1(uuid) set schema private;
 alter function public.get_my_blocks_v1() set schema private;
 
+-- The original report function parameter names collide with reports.target_type/target_id
+-- inside PL/pgSQL ON CONFLICT inference. Recreate only the private implementation with
+-- non-colliding names while preserving the public RPC argument contract below.
+drop function private.submit_report_v1(text, uuid, text, text);
+create function private.submit_report_v1(
+  p_target_type text,
+  p_target_id uuid,
+  p_target_reason text,
+  p_target_details text default null
+)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare
+  actor_id uuid := auth.uid();
+  report_id uuid;
+  details_value text := nullif(btrim(coalesce(p_target_details, '')), '');
+  allowed boolean := false;
+begin
+  if actor_id is null then raise exception 'authentication required'; end if;
+  if p_target_id is null then raise exception 'report target required'; end if;
+  if p_target_type not in ('post', 'comment', 'user', 'challenge') then raise exception 'invalid report target'; end if;
+  if p_target_reason not in ('spam', 'harassment', 'hate', 'dangerous', 'sexual', 'self_harm', 'illegal', 'impersonation', 'other') then
+    raise exception 'invalid report reason';
+  end if;
+  if details_value is not null and char_length(details_value) > 1000 then raise exception 'report details too long'; end if;
+
+  case p_target_type
+    when 'post' then
+      select private.can_view_post(p_target_id) into allowed;
+    when 'comment' then
+      select exists (
+        select 1 from public.comments c
+        where c.id = p_target_id
+          and c.status = 'published'
+          and private.can_view_post(c.post_id)
+          and not private.is_blocked_pair(actor_id, c.user_id)
+      ) into allowed;
+    when 'user' then
+      select exists (select 1 from public.profiles p where p.id = p_target_id and p.id <> actor_id) into allowed;
+    when 'challenge' then
+      select exists (
+        select 1 from public.challenges c
+        where c.id = p_target_id
+          and (
+            c.visibility = 'public'
+            or c.owner_id = actor_id
+            or private.is_challenge_member(c.id)
+          )
+      ) into allowed;
+  end case;
+
+  if not allowed then raise exception 'report target not visible'; end if;
+
+  insert into public.reports (reporter_id, target_type, target_id, reason, details)
+  values (actor_id, p_target_type, p_target_id::text, p_target_reason, details_value)
+  on conflict (reporter_id, target_type, target_id, reason)
+    where status in ('open', 'reviewing')
+  do update set details = coalesce(excluded.details, public.reports.details)
+  returning id into report_id;
+
+  return report_id;
+end;
+$$;
+
 revoke all on function private.set_follow_v1(uuid, boolean) from public, anon, authenticated;
 revoke all on function private.set_post_reaction_v1(uuid, text) from public, anon, authenticated;
 revoke all on function private.create_comment_v1(uuid, text) from public, anon, authenticated;
