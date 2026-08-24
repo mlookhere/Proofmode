@@ -165,7 +165,7 @@ requireAll(rpcBoundarySql, [
   "select * from private.get_my_crews_v1",
   "select private.get_crew_room_v1",
   "select private.post_crew_message_v1",
-  "select private.get_my_blocks_v1",
+  "select * from private.get_my_blocks_v1",
 ], "Social RPC boundary");
 
 const mobilePackage = JSON.parse(await read("mobile/package.json"));
