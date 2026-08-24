@@ -7,7 +7,7 @@
 
 ### Implemented and verified
 - Expo SDK 57 mobile app with Home / Explore / Post / Crews / You.
-- Supabase migrations `001` through `008` are applied to the connected Proofmode staging project.
+- Supabase migrations `001` through `009` are applied to the connected Proofmode staging project.
 - The canonical launch library is enforced at exactly 60 challenge templates.
 - RLS-only `SECURITY DEFINER` helpers live in the non-exposed `private` schema instead of public RPC space.
 - The obsolete `join_public_challenge` RPC is removed; `join_challenge_v2` is the single join path.
@@ -16,14 +16,15 @@
 - Migration `008` centralizes media/post lifecycle transitions, prevents one media asset from backing multiple posts, keeps media mutation server-owned, and reuses `job_outbox` for moderation.
 - Staging verification confirms the migration-008 index/functions/triggers exist and authenticated clients can read `media_assets` but cannot insert, update, or delete them.
 - A rollback-only staging lifecycle smoke verified `ready → moderation_pending`, one deduplicated moderation job, and `approved → published` without leaving test data.
-- Supabase security-advisor output after migration `008` is unchanged from the known intentional baseline; no new migration-008 security finding was introduced.
-- A staging consistency audit found zero future-dated published rows, published/unapproved mismatches, published posts backed by unready media, media/post owner mismatches, active orphan media, deleted-media/live-post mismatches, ready-approved unpublished posts, or due background jobs.
+- Supabase security-advisor output after the media/feed migrations is unchanged from the known intentional baseline.
+- Migration `009` explicitly excludes future-dated `published_at` rows from `get_feed_v1` without changing deterministic score or keyset ordering; rollback-only staging verification returned zero future rows and left no test data.
+- A staging consistency audit found zero published/unapproved mismatches, published posts backed by unready media, media/post owner mismatches, active orphan media, deleted-media/live-post mismatches, ready-approved unpublished posts, or due background jobs.
 - One mobile Supabase client with persistent AsyncStorage-backed sessions.
 - One root auth/session provider with foreground/background token refresh handling.
 - The plan-required email magic-link fallback is implemented with `proofmode://auth` deep-link session completion; the temporary password bootstrap is removed.
 - Public Home and Explore remain readable while signed out; Post, Crews, and You require a session.
 - Home reads live `get_feed_v1` with pull-to-refresh and deterministic keyset infinite scroll.
-- Home renders published image and HLS video media returned by the existing feed RPC; only a visible video on the focused Home tab plays.
+- Home renders published image and HLS video media returned by the feed RPC; only a visible video on the focused Home tab plays.
 - Explore reads live public Drops; public Drop detail supports persisted Join and Watch/Unwatch state.
 - Post/Create supports Proof, Fail, Almost, Comeback, PR, and Reset; it targets a joined public Drop and validates image/video limits before upload.
 - Media upload authorization requires a joined challenge with both `visibility='public'` and `format='drop'`, and current Drop membership is rechecked before a non-finalized upload can advance through finalize.
@@ -36,9 +37,12 @@
 - Abandoned pending/uploading/processing/failed media is handled by a daily server cleanup route protected by `CRON_SECRET`.
 - Mobile receives only its Supabase user session and provider upload URL; Supabase service-role, R2, Stream, webhook, and cron secrets remain server-side.
 - Mobile is versioned at `0.9.0` with an npm-generated SDK-57 lockfile for `expo-file-system`, `expo-image-picker`, and `expo-video`.
-- CI covers foundation validation, local Supabase startup, database linting, transactional pgTAP tests, mobile locked install/typecheck, and web typecheck/build.
-- The hardened v0.9 Media/Create feature head passed Foundation, Database, Mobile, and Web after the full pre-merge runtime/concurrency audit.
-- Web CI is pinned to TypeScript 6.x for Next 16 compatibility; GitHub Actions use Node-24-compatible action majors.
+- Root web dependencies are reproducibly locked with npm lockfile version 3; Web CI uses `npm ci --ignore-scripts` with cache keyed from `package-lock.json`.
+- Root `next` is patched from `16.2.11` to `16.3.2`; the resulting lock resolves `postcss@8.5.23` and `sharp@0.35.3`, and both full and production-only root npm audits report zero vulnerabilities.
+- Next `16.3.2` passes ProofMode Web typecheck and production build with the existing `typescript@6.0.3` compatibility pin.
+- The mobile npm audit reports zero high/critical findings and 10 moderate findings in the Expo SDK-57 tooling graph. The concrete vulnerable chain is `expo@57.0.15 → @expo/config-plugins@57.0.8 → xcode@3.0.1 → uuid@7.0.3`; npm provides no safe SDK-57-compatible aggregate remediation, so no forced Expo rollback or unsupported uuid override is used.
+- Foundation validation covers migration contracts, media/runtime hardening, root package/lock parity, dependency security floors, TypeScript compatibility, and locked Web CI.
+- CI covers foundation validation, local Supabase startup, database linting, transactional pgTAP tests, mobile locked install/typecheck, and web locked install/typecheck/build.
 - GitHub Issues are the durable control plane: `main` is released history, `dev` is integration, and work/bug branches are Issue-backed. Native protected branches are unavailable on the current private-repository plan, so local pre-push blocking plus server-side branch-policy audit provide the documented soft enforcement.
 
 ### Present but not fully external/device-verified
@@ -48,11 +52,14 @@
 - Cloudflare R2/Stream credentials, Stream webhook registration/secret, production media delivery base URL, and `CRON_SECRET` must be configured in the deployed environment before end-to-end media validation.
 - Physical-device camera/library selection and real R2/Stream upload/playback must still be exercised after those provider settings exist.
 - The moderation lifecycle and queue handoff are implemented, but a real moderation worker/provider must consume `job_outbox` moderation jobs before ordinary uploaded posts automatically reach `published`.
-- The root web project still lacks a lockfile and Web CI still uses `npm install`; Issue #16 tracks locking the root install, switching to `npm ci`, and resolving or documenting the exact npm audit findings.
+- The remaining mobile moderate dependency findings are upstream Expo build/config-tooling constraints and should be re-audited when Expo publishes a compatible SDK-57 dependency update.
+- Next.js has announced another scheduled security release for August 26, 2026; re-audit the locked root dependency set before any public release occurring after that patch is available.
 
-### Known audit follow-ups before the next product phase
-- Issue #15: `get_feed_v1` must explicitly exclude future-dated `published_at` rows. Staging contains none today, but the current RPC does not enforce the invariant.
-- Issue #16: commit a root web lockfile, switch Web CI to locked installs, and resolve/document the exact root and mobile dependency advisories.
+### Completed pre-social audit pass
+- Media/Create runtime, authorization, recovery, provider lifecycle, cleanup, account isolation, and focused-video behavior received a second pass and were hardened before integration.
+- Feed publication-time eligibility is now enforced by migration `009` and verified on staging.
+- Root dependency reproducibility is locked and the high-severity Next/PostCSS/sharp findings are remediated.
+- Mobile dependency findings are captured with their exact Expo/uuid chain and are explicitly left upstream rather than force-fixed.
 
 ### Not implemented
 - Reactions, comments, follows, live Crew data, report/block.
@@ -64,12 +71,11 @@
 
 ## Execution order from here
 
-1. **Close audit follow-ups #15 and #16** — feed publication-time guard plus dependency locking/security audit.
-2. **Social actions** — reactions, comments, follows, Crew basics, report/block.
-3. **Journey/proof integration** — proof ledger, streak/reset/comeback behavior, Passport metrics/history.
-4. **Sharing and attribution** — exact-content links, hosted association files, native share, invite attribution.
-5. **Push and monetization** — notification preferences/contextual push first, then RevenueCat.
-6. **Closed alpha** — seed content, small real communities, activation/retention/safety/media-cost validation.
+1. **Social actions** — reactions, comments, follows, Crew basics, report/block.
+2. **Journey/proof integration** — proof ledger, streak/reset/comeback behavior, Passport metrics/history.
+3. **Sharing and attribution** — exact-content links, hosted association files, native share, invite attribution.
+4. **Push and monetization** — notification preferences/contextual push first, then RevenueCat.
+5. **Closed alpha** — seed content, small real communities, activation/retention/safety/media-cost validation.
 
 Auth provider/device configuration and Media/Create provider/device validation remain parallel release gates. They do not block safe code validation, but they must not be represented as complete until the real hosted/provider/device checks pass.
 
@@ -87,4 +93,5 @@ Auth provider/device configuration and Media/Create provider/device validation r
 - Use existing Postgres/Supabase infrastructure before adding search, queues, or feed services.
 - Use native share before platform posting SDKs.
 - Do not add DMs, live video, ML ranking, broad contacts access, or unrelated features during MVP.
+- Do not use `npm audit fix --force` or unsupported transitive overrides to make audit counts look clean.
 - GitHub Issues are the durable work/handoff record. Conversation context is never the only place current state may live.
