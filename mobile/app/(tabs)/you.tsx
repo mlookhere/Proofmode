@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "@/auth/session";
 import { fetchMyProfile, fetchProfileSnapshot, type Profile, type ProfileSnapshot } from "@/api/profile";
+import { fetchMyBlocks, setBlock, type BlockedUser } from "@/api/social";
 import { AuthRequired } from "@/components/auth-required";
 import { PrimaryButton, Screen, Surface } from "@/components/ui";
 import { colors, radius, spacing } from "@/theme";
@@ -18,7 +19,9 @@ export default function You() {
   const { session, isLoading: isSessionLoading, signOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [snapshot, setSnapshot] = useState<ProfileSnapshot>(emptySnapshot);
+  const [blockedUsers, setBlockedUsers] = useState<readonly BlockedUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -28,8 +31,13 @@ export default function You() {
 
     try {
       const nextProfile = await fetchMyProfile(session.user.id);
+      const [nextSnapshot, nextBlocks] = await Promise.all([
+        nextProfile.handle ? fetchProfileSnapshot(nextProfile.handle) : Promise.resolve(null),
+        fetchMyBlocks(),
+      ]);
       setProfile(nextProfile);
-      setSnapshot(nextProfile.handle ? (await fetchProfileSnapshot(nextProfile.handle)) ?? emptySnapshot : emptySnapshot);
+      setSnapshot(nextSnapshot ?? emptySnapshot);
+      setBlockedUsers(nextBlocks);
     } catch {
       setError("Could not load your profile.");
     } finally {
@@ -40,6 +48,20 @@ export default function You() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function unblock(userId: string) {
+    if (isMutating) return;
+    setIsMutating(true);
+    setError(null);
+    try {
+      await setBlock(userId, false);
+      setBlockedUsers((current) => current.filter((user) => user.id !== userId));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not unblock user.");
+    } finally {
+      setIsMutating(false);
+    }
+  }
 
   if (isSessionLoading) return <Screen />;
   if (!session) return <AuthRequired title="THIS IS YOUR RECEIPT WALL." message="Sign in to see your profile, proof score, receipts, and founder badges." />;
@@ -92,6 +114,26 @@ export default function You() {
         ))}
       </View>
 
+      {blockedUsers.length > 0 ? (
+        <View style={styles.blockedSection}>
+          <Text style={styles.sectionLabel}>BLOCKED USERS</Text>
+          <Surface style={styles.blockedList}>
+            {blockedUsers.map((user) => (
+              <View key={user.id} style={styles.blockedRow}>
+                <View style={styles.blockedCopy}>
+                  <Text style={styles.blockedName}>{user.displayName}</Text>
+                  {user.handle ? <Text style={styles.blockedHandle}>@{user.handle}</Text> : null}
+                </View>
+                <Pressable accessibilityRole="button" disabled={isMutating} onPress={() => void unblock(user.id)}>
+                  <Text style={styles.unblock}>UNBLOCK</Text>
+                </Pressable>
+              </View>
+            ))}
+          </Surface>
+        </View>
+      ) : null}
+
+      {isMutating ? <ActivityIndicator color={colors.hot} style={styles.mutating} /> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <PrimaryButton onPress={() => void signOut()}>SIGN OUT</PrimaryButton>
     </Screen>
@@ -113,5 +155,14 @@ const styles = StyleSheet.create({
   stat: { width: "48%", backgroundColor: colors.panel2, borderRadius: radius.md, padding: 14 },
   statValue: { color: colors.text, fontSize: 25, fontWeight: "900" },
   statLabel: { color: colors.muted, fontSize: 8, fontWeight: "900", letterSpacing: 1, marginTop: 3 },
+  blockedSection: { marginVertical: spacing.xl },
+  sectionLabel: { color: colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.2, marginBottom: spacing.sm },
+  blockedList: { paddingHorizontal: spacing.md },
+  blockedRow: { minHeight: 58, flexDirection: "row", alignItems: "center", borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },
+  blockedCopy: { flex: 1 },
+  blockedName: { color: colors.text, fontWeight: "900" },
+  blockedHandle: { color: colors.muted, marginTop: 2 },
+  unblock: { color: colors.hot, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  mutating: { marginBottom: spacing.md },
   error: { color: colors.danger, lineHeight: 20, marginTop: spacing.md },
 });

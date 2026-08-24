@@ -84,6 +84,10 @@ export default function Home() {
     void load();
   }, [load]);
 
+  const hideBlockedUser = useCallback((userId: string) => {
+    setPosts((current) => current.filter((post) => post.userId !== userId));
+  }, []);
+
   return (
     <Screen scroll={false}>
       <View style={styles.header}>
@@ -126,7 +130,9 @@ export default function Home() {
               </Pressable>
             ) : null
           }
-          renderItem={({ item }) => <FeedCard item={item} height={cardHeight} active={feedFocused && activePostId === item.id} />}
+          renderItem={({ item }) => (
+            <FeedCard item={item} height={cardHeight} active={feedFocused && activePostId === item.id} onBlocked={hideBlockedUser} />
+          )}
         />
       )}
     </Screen>

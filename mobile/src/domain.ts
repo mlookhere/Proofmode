@@ -6,18 +6,25 @@ export type FeedMedia = Readonly<{
   url: string;
 }>;
 
+export type FeedReaction = "proven" | "respect" | "lol" | "run_it_back" | "im_next";
+
 export type FeedPost = Readonly<{
   id: string;
+  userId: string;
   kind: PostKind;
   day: string;
   user: string;
   handle: string;
+  challengeId: string | null;
+  challengeSlug: string | null;
   challenge: string;
   value: string;
   caption: string;
   accent: string;
-  reactions: string;
-  comments: string;
+  reactions: number;
+  comments: number;
+  viewerFollows: boolean;
+  viewerReaction: FeedReaction | null;
   action: string;
   media?: FeedMedia;
 }>;
