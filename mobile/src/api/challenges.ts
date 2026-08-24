@@ -35,6 +35,8 @@ type ChallengeRow = {
   cover_emoji: string | null;
 };
 
+type MembershipRow = { challenges: ChallengeRow | ChallengeRow[] | null };
+
 const challengeFields = "id,title,slug,rule,duration_days,visibility,format,category,tagline,seat_cap,founder_cutoff,cover_emoji";
 
 function mapChallenge(row: ChallengeRow): PublicChallenge {
@@ -66,6 +68,22 @@ export async function fetchPublicChallenges(limit = 24): Promise<readonly Public
 
   if (error) throw error;
   return ((data ?? []) as ChallengeRow[]).map(mapChallenge);
+}
+
+export async function fetchJoinedPublicChallenges(userId: string): Promise<readonly PublicChallenge[]> {
+  const { data, error } = await requireSupabase()
+    .from("challenge_members")
+    .select(`challenges!inner(${challengeFields})`)
+    .eq("user_id", userId)
+    .eq("challenges.visibility", "public")
+    .eq("challenges.format", "drop")
+    .order("joined_at", { ascending: false });
+
+  if (error) throw error;
+  return ((data ?? []) as MembershipRow[]).flatMap(({ challenges }) => {
+    const challenge = Array.isArray(challenges) ? challenges[0] : challenges;
+    return challenge ? [mapChallenge(challenge)] : [];
+  });
 }
 
 export async function fetchChallengeBySlug(slug: string): Promise<PublicChallenge | null> {
@@ -130,6 +148,7 @@ export async function setChallengeWatched(challengeId: string, userId: string, w
     .from("watched_challenges")
     .delete()
     .eq("user_id", userId)
-    .eq("challenge_id", challengeId);
+    .eq("challenge_id", challengeId)
+    .eq("user_id", userId);
   if (error) throw error;
 }
