@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewToken } from "react-native";
+import { useFocusEffect } from "expo-router";
 import type { FeedPost } from "@/domain";
 import { posts as previewPosts } from "@/data";
 import { fetchFeedPage, type FeedCursor } from "@/api/feed";
@@ -27,12 +28,18 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState(false);
   const [activePostId, setActivePostId] = useState<string | null>(null);
+  const [feedFocused, setFeedFocused] = useState(false);
   const loadingMoreRef = useRef(false);
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 70 }).current;
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<FeedPost>[] }) => {
-    const next = viewableItems.find((token) => token.isViewable)?.item?.id ?? null;
+    const next = viewableItems.find((token) => token.isViewable && token.item?.media?.kind === "video")?.item?.id ?? null;
     setActivePostId(next);
   }).current;
+
+  useFocusEffect(useCallback(() => {
+    setFeedFocused(true);
+    return () => setFeedFocused(false);
+  }, []));
 
   const load = useCallback(async (refresh = false) => {
     if (!isSupabaseConfigured || (refresh && loadingMoreRef.current)) return;
@@ -119,7 +126,7 @@ export default function Home() {
               </Pressable>
             ) : null
           }
-          renderItem={({ item }) => <FeedCard item={item} height={cardHeight} active={activePostId === item.id} />}
+          renderItem={({ item }) => <FeedCard item={item} height={cardHeight} active={feedFocused && activePostId === item.id} />}
         />
       )}
     </Screen>
