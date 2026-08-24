@@ -8,6 +8,14 @@ export type Profile = Readonly<{
   plan: "free" | "pro" | "creator" | "black";
 }>;
 
+export type PublicProfile = Readonly<{
+  id: string;
+  handle: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+}>;
+
 export type PassportJourney = Readonly<{
   id: string;
   challenge_id: string;
@@ -74,6 +82,16 @@ export async function fetchMyProfile(userId: string): Promise<Profile> {
 
   if (error) throw error;
   return data as Profile;
+}
+
+export async function fetchPublicProfile(handle: string): Promise<PublicProfile | null> {
+  const { data, error } = await requireSupabase()
+    .from("profiles")
+    .select("id,handle,display_name,avatar_url,bio")
+    .eq("handle", handle)
+    .maybeSingle();
+  if (error) throw error;
+  return data as PublicProfile | null;
 }
 
 export async function fetchProfileSnapshot(handle: string): Promise<ProfileSnapshot | null> {
