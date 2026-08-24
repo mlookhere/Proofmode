@@ -1,0 +1,97 @@
+import {
+  IMAGE_MIME_TYPES,
+  MAX_IMAGE_BYTES,
+  MediaApiError,
+  adminClient,
+  asMediaApiResponse,
+  assertPublicChallengeMembership,
+  r2PublicUrl,
+  readR2Object,
+  requireBearerUser,
+} from "@/lib/media/server";
+
+export async function POST(request: Request) {
+  try {
+    const user = await requireBearerUser(request);
+    const body = await request.json() as { mediaId?: unknown };
+    const mediaId = typeof body.mediaId === "string" ? body.mediaId : "";
+    if (!mediaId) throw new MediaApiError(400, "mediaId is required");
+
+    const admin = adminClient();
+    const { data: asset, error } = await admin
+      .from("media_assets")
+      .select("id, owner_id, provider, media_kind, storage_key, mime_type, processing_status")
+      .eq("id", mediaId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!asset || asset.owner_id !== user.id) throw new MediaApiError(404, "Upload not found");
+    if (asset.processing_status === "deleted") throw new MediaApiError(409, "Upload was discarded");
+
+    const { data: initialPost, error: initialPostError } = await admin
+      .from("posts")
+      .select("id, user_id, challenge_id, status, moderation_status")
+      .eq("media_asset_id", mediaId)
+      .maybeSingle();
+    if (initialPostError) throw initialPostError;
+    if (!initialPost || initialPost.user_id !== user.id || !initialPost.challenge_id) {
+      throw new MediaApiError(409, "Upload has no valid Drop post");
+    }
+    if (initialPost.status === "published" && asset.processing_status === "ready") {
+      return Response.json({ postId: initialPost.id, status: initialPost.status, moderationStatus: initialPost.moderation_status });
+    }
+    if (initialPost.status === "removed") throw new MediaApiError(409, "Post was removed");
+
+    await assertPublicChallengeMembership(admin, user.id, initialPost.challenge_id);
+
+    if (asset.provider === "r2") {
+      if (!asset.storage_key) throw new MediaApiError(409, "Image upload has no storage key");
+      if (asset.processing_status !== "ready") {
+        const remote = await readR2Object(asset.storage_key);
+        if (!remote.bytes || remote.bytes <= 0) throw new MediaApiError(409, "Image upload is incomplete");
+        if (remote.bytes > MAX_IMAGE_BYTES) throw new MediaApiError(413, "Image exceeds the 20 MB limit");
+        const mimeType = remote.mimeType?.toLowerCase() || asset.mime_type?.toLowerCase() || "";
+        if (!IMAGE_MIME_TYPES.has(mimeType)) throw new MediaApiError(415, "Uploaded image type is not allowed");
+
+        const { data: updated, error: updateError } = await admin
+          .from("media_assets")
+          .update({
+            bytes: remote.bytes,
+            mime_type: mimeType,
+            public_url: r2PublicUrl(asset.storage_key),
+            processing_status: "ready",
+          })
+          .eq("id", mediaId)
+          .eq("owner_id", user.id)
+          .neq("processing_status", "deleted")
+          .select("id")
+          .maybeSingle();
+        if (updateError) throw updateError;
+        if (!updated) throw new MediaApiError(409, "Upload state changed; try again");
+      }
+    } else if (asset.provider === "stream") {
+      if (asset.processing_status === "uploading") {
+        const { error: updateError } = await admin
+          .from("media_assets")
+          .update({ processing_status: "processing" })
+          .eq("id", mediaId)
+          .eq("owner_id", user.id)
+          .eq("processing_status", "uploading");
+        if (updateError) throw updateError;
+      }
+    } else {
+      throw new MediaApiError(409, "Unsupported upload provider");
+    }
+
+    const { data: post, error: postError } = await admin
+      .from("posts")
+      .select("id, status, moderation_status")
+      .eq("id", initialPost.id)
+      .maybeSingle();
+    if (postError) throw postError;
+    if (!post) throw new MediaApiError(409, "Upload has no post");
+
+    return Response.json({ postId: post.id, status: post.status, moderationStatus: post.moderation_status });
+  } catch (error) {
+    return asMediaApiResponse(error);
+  }
+}

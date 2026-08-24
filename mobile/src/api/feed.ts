@@ -12,6 +12,8 @@ type FeedRow = Readonly<{
   challenge_id: string | null;
   challenge_title: string | null;
   proof_id: string | null;
+  media_kind: "image" | "video" | null;
+  media_public_url: string | null;
   reaction_count: number | string;
   comment_count: number | string;
   score: number | string;
@@ -64,6 +66,9 @@ function displayMark(kind: PostKind) {
 function toFeedPost(row: FeedRow): FeedPost {
   const kind = asPostKind(row.kind);
   const handle = row.handle ? `@${row.handle}` : "";
+  const media = row.media_kind && row.media_public_url
+    ? { kind: row.media_kind, url: row.media_public_url } as const
+    : undefined;
 
   return {
     id: row.post_id,
@@ -78,6 +83,7 @@ function toFeedPost(row: FeedRow): FeedPost {
     reactions: compactCount(row.reaction_count),
     comments: compactCount(row.comment_count),
     action: row.challenge_id ? "VIEW CHALLENGE" : row.proof_id ? "VIEW PROOF" : "VIEW POST",
+    media,
   };
 }
 

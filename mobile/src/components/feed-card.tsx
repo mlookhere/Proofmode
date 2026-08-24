@@ -1,16 +1,35 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect } from "react";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useVideoPlayer, VideoView } from "expo-video";
 import type { FeedPost } from "@/domain";
 import { colors, radius, spacing } from "@/theme";
 
-export function FeedCard({ item, height }: { item: FeedPost; height: number }) {
+function FeedVideo({ uri, active }: { uri: string; active: boolean }) {
+  const player = useVideoPlayer(uri, (instance) => {
+    instance.loop = true;
+    instance.muted = true;
+  });
+
+  useEffect(() => {
+    if (active) player.play();
+    else player.pause();
+  }, [active, player]);
+
+  return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} surfaceType="textureView" />;
+}
+
+export function FeedCard({ item, height, active = false }: { item: FeedPost; height: number; active?: boolean }) {
   return (
     <View style={[styles.card, { height }]}>
       <View style={[styles.visual, { borderColor: item.accent }]}>
+        {item.media?.kind === "image" && <Image source={{ uri: item.media.url }} resizeMode="cover" style={StyleSheet.absoluteFill} />}
+        {item.media?.kind === "video" && <FeedVideo uri={item.media.url} active={active} />}
+        {item.media && <View pointerEvents="none" style={styles.scrim} />}
         <View style={styles.top}>
           <Text style={[styles.kind, { color: item.accent, borderColor: item.accent }]}>{item.kind.toUpperCase()}</Text>
           <Text style={styles.day}>{item.day}</Text>
         </View>
-        <Text style={styles.value}>{item.value}</Text>
+        {!item.media && <Text style={styles.value}>{item.value}</Text>}
         <Text style={styles.challenge}>{item.challenge}</Text>
       </View>
       <View style={styles.copy}>
@@ -47,6 +66,15 @@ const styles = StyleSheet.create({
     padding: 20,
     justifyContent: "flex-end",
     borderBottomWidth: 1,
+    overflow: "hidden",
+  },
+  scrim: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(0,0,0,0.24)",
   },
   top: {
     position: "absolute",
@@ -64,12 +92,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.2,
+    backgroundColor: "rgba(9,10,12,0.72)",
   },
   day: {
     color: colors.text,
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 1,
+    backgroundColor: "rgba(9,10,12,0.72)",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
   },
   value: {
     color: colors.text,
@@ -78,10 +111,12 @@ const styles = StyleSheet.create({
     letterSpacing: -5,
   },
   challenge: {
-    color: colors.muted,
+    color: colors.text,
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1,
+    textShadowColor: "rgba(0,0,0,0.8)",
+    textShadowRadius: 8,
   },
   copy: {
     padding: spacing.lg,
