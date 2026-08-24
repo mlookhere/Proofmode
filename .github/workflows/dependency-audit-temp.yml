@@ -33,6 +33,7 @@ jobs:
           npm audit --json > root-audit.json || true
           npm audit --omit=dev --json > root-audit-production.json || true
           cd mobile
+          npm ci --ignore-scripts
           npm audit --json > ../mobile-audit.json || true
           npm audit --omit=dev --json > ../mobile-audit-production.json || true
           npm ls uuid --all --json > ../mobile-uuid-tree.json || true
@@ -42,6 +43,7 @@ jobs:
           name: dependency-audit-evidence
           path: |
             package-lock.json
+            mobile/package-lock.json
             dependency-environment.txt
             root-audit.json
             root-audit-production.json
