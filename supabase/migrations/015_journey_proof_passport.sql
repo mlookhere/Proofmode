@@ -50,6 +50,7 @@ returns boolean language sql stable security definer set search_path = '' as $$
   );
 $$;
 revoke all on function private.can_view_journey_v1(uuid) from public, anon, authenticated;
+grant execute on function private.can_view_journey_v1(uuid) to anon, authenticated;
 
 drop policy if exists "visible journeys" on public.journeys;
 create policy "visible journeys" on public.journeys for select
@@ -339,6 +340,7 @@ begin
   return new;
 end;
 $$;
+revoke all on function private.sync_published_post_proof_v1() from public, anon, authenticated;
 
 drop trigger if exists posts_sync_published_proof_insert on public.posts;
 create trigger posts_sync_published_proof_insert
