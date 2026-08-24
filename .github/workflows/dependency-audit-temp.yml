@@ -1,8 +1,6 @@
 name: Temporary Dependency Audit
 
 on:
-  push:
-    branches: [work/16-lock-audit-root-dependencies]
   pull_request:
     branches: [dev]
 
@@ -11,13 +9,13 @@ permissions:
 
 jobs:
   audit:
-    if: github.actor != 'github-actions[bot]' && (github.event_name != 'pull_request' || github.head_ref == 'work/16-lock-audit-root-dependencies')
+    if: github.actor != 'github-actions[bot]' && github.head_ref == 'work/16-lock-audit-root-dependencies'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22.13.0
@@ -27,20 +25,18 @@ jobs:
         shell: bash
         run: |
           set -u
-          {
-            echo "node=$(node --version)"
-            echo "npm=$(npm --version)"
-            echo "root_package=proofmode@$(node -p \"require('./package.json').version\")"
-            echo "mobile_package=proofmode-mobile@$(node -p \"require('./mobile/package.json').version\")"
-          } > dependency-environment.txt
+          root_version=$(node -p "require('./package.json').version")
+          mobile_version=$(node -p "require('./mobile/package.json').version")
+          printf 'node=%s\nnpm=%s\nroot_package=proofmode@%s\nmobile_package=proofmode-mobile@%s\n' \
+            "$(node --version)" "$(npm --version)" "$root_version" "$mobile_version" \
+            > dependency-environment.txt
           npm audit --json > root-audit.json || true
           npm audit --omit=dev --json > root-audit-production.json || true
-          (
-            cd mobile
-            npm audit --json > ../mobile-audit.json || true
-            npm audit --omit=dev --json > ../mobile-audit-production.json || true
-            npm ls uuid --all --json > ../mobile-uuid-tree.json || true
-          )
+          cd mobile
+          npm audit --json > ../mobile-audit.json || true
+          npm audit --omit=dev --json > ../mobile-audit-production.json || true
+          npm ls uuid --all --json > ../mobile-uuid-tree.json || true
+          cd ..
       - uses: actions/upload-artifact@v4
         with:
           name: dependency-audit-evidence
