@@ -1,6 +1,11 @@
 export const postKinds = ["proof", "fail", "almost", "comeback", "pr", "chaos", "bts", "reset"] as const;
 export type PostKind = (typeof postKinds)[number];
 
+export type FeedMedia = Readonly<{
+  kind: "image" | "video";
+  url: string;
+}>;
+
 export type FeedPost = Readonly<{
   id: string;
   kind: PostKind;
@@ -14,6 +19,7 @@ export type FeedPost = Readonly<{
   reactions: string;
   comments: string;
   action: string;
+  media?: FeedMedia;
 }>;
 
 export type ChallengeTemplate = Readonly<{

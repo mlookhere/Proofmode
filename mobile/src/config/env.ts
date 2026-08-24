@@ -9,6 +9,7 @@ function parseAppEnvironment(value: string | undefined): AppEnvironment {
 
 export const publicEnv = Object.freeze({
   appEnvironment: parseAppEnvironment(process.env.EXPO_PUBLIC_APP_ENV),
+  apiUrl: process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, ""),
   supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
   supabasePublishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 });
@@ -24,4 +25,9 @@ export function requireSupabaseEnv() {
     supabaseUrl: publicEnv.supabaseUrl!,
     supabasePublishableKey: publicEnv.supabasePublishableKey!,
   } as const;
+}
+
+export function requireApiUrl() {
+  if (!publicEnv.apiUrl) throw new Error("Missing EXPO_PUBLIC_API_URL");
+  return publicEnv.apiUrl;
 }

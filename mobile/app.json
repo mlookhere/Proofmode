@@ -3,11 +3,19 @@
     "name": "ProofMode",
     "slug": "proofmode",
     "scheme": "proofmode",
-    "version": "0.8.0",
+    "version": "0.9.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ProofMode to choose photos and videos for your proof posts.",
+          "cameraPermission": "Allow ProofMode to use your camera for proof posts.",
+          "microphonePermission": "Allow ProofMode to record audio with proof videos."
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,
