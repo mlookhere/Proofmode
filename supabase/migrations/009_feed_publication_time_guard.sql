@@ -73,7 +73,7 @@ returns table (
       and p.visibility = 'public'
       and p.published_at is not null
       and p.published_at <= now()
-      and not public.is_blocked_pair(auth.uid(), p.user_id)
+      and not private.is_blocked_pair(auth.uid(), p.user_id)
       and (m.id is null or (m.processing_status = 'ready' and m.moderation_status = 'approved'))
   )
   select
