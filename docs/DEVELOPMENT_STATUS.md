@@ -45,6 +45,18 @@
 - CI covers foundation validation, local Supabase startup, database linting, transactional pgTAP tests, mobile locked install/typecheck, and web locked install/typecheck/build.
 - GitHub Issues are the durable control plane: `main` is released history, `dev` is integration, and work/bug branches are Issue-backed. Native protected branches are unavailable on the current private-repository plan, so local pre-push blocking plus server-side branch-policy audit provide the documented soft enforcement.
 
+### Implemented on Social Actions branch; verification pending
+- Issue #21 is active on `work/21-social-actions`, based directly on the released `dev` integration state.
+- Forward migrations `010` and `011` add the Social Actions contract without rewriting applied migrations: RPC-owned follows/reactions/comments/block/report mutations, block-aware reads, Crew room messages, Crew read models, invite creation, feed viewer relationship state, and caller-only blocked-user listing for unblock.
+- Blocking atomically removes both directional follow edges; blocked pairs cannot newly follow/react/comment through the social RPCs, and blocked authors are filtered from exposed feed/comment/profile/Crew reads.
+- Home is wired to real follow/unfollow, the five canonical reactions, text comments, own-comment deletion, post/comment/user reporting, and block behavior. Signed-out users may read public content/comments but are routed to authentication before persisted interaction.
+- Public Drop detail includes report submission through the same reason taxonomy.
+- Crews reuses `challenges`, `challenge_members`, proofs/posts, and invites as the room/membership/activity model instead of adding parallel Crew membership tables. One `crew_messages` table supplies the lightweight room thread.
+- Crews tab now loads signed-in Crew rooms; room detail includes members, proof-based leaderboard, recent activity, text thread, own-message deletion, and invite-code creation.
+- You includes a caller-only blocked-user list with unblock.
+- Social pgTAP coverage contains 45 transactional assertions for follow/reaction/comment/block/report/Crew invariants. Foundation validation now requires the social migrations, ACL/RPC contracts, mobile social surfaces, and the new test file.
+- These Social Actions changes are not yet considered verified or integrated until PR metadata plus Foundation, Database, Mobile, and Web CI pass and the branch is merged to `dev`.
+
 ### Present but not fully external/device-verified
 - Hosted Supabase must allow `proofmode://auth` before physical-device magic-link testing; the local Supabase config already allows it.
 - Universal/App Link configuration exists; hosted association files and device-level tests are still required.
@@ -57,12 +69,11 @@
 
 ### Completed pre-social audit pass
 - Media/Create runtime, authorization, recovery, provider lifecycle, cleanup, account isolation, and focused-video behavior received a second pass and were hardened before integration.
-- Feed publication-time eligibility is now enforced by migration `009` and verified on staging.
+- Feed publication-time eligibility is enforced by migration `009` and verified on staging.
 - Root dependency reproducibility is locked and the high-severity Next/PostCSS/sharp findings are remediated.
 - Mobile dependency findings are captured with their exact Expo/uuid chain and are explicitly left upstream rather than force-fixed.
 
 ### Not implemented
-- Reactions, comments, follows, live Crew data, report/block.
 - Full Journey/proof ledger, streak/reset/comeback integration, and Passport history/metrics.
 - Sharing/attribution and hosted universal-link association files.
 - Push notifications/preferences.
@@ -71,7 +82,7 @@
 
 ## Execution order from here
 
-1. **Social actions** — reactions, comments, follows, Crew basics, report/block.
+1. **Finish Social Actions verification/integration** — full CI/control pass, staging migration verification, then merge Issue #21 into `dev`.
 2. **Journey/proof integration** — proof ledger, streak/reset/comeback behavior, Passport metrics/history.
 3. **Sharing and attribution** — exact-content links, hosted association files, native share, invite attribution.
 4. **Push and monetization** — notification preferences/contextual push first, then RevenueCat.
@@ -85,6 +96,8 @@ Auth provider/device configuration and Media/Create provider/device validation r
 - Domain-specific query functions only; no repository/data-access abstraction until real duplication exists.
 - Keep authorization in RLS/RPC/server boundaries instead of duplicating it in clients.
 - Keep internal `SECURITY DEFINER` helpers outside exposed schemas.
+- Reuse challenge membership/invites as the Crew container; do not add duplicate Crew membership infrastructure.
+- Social mutations with cross-table invariants stay RPC-owned; clients do not write those tables directly.
 - Media provider credentials and publication state stay server-owned.
 - Use the existing `job_outbox` before adding another queue service.
 - Backend values are canonical. UI formatting stays in UI/mappers.
