@@ -3,6 +3,9 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(50);
 
+-- Test harness introspection only; production Journey reads use the RPC/RLS boundary.
+grant select on table public.journeys to authenticated;
+
 insert into auth.users (id, email, raw_user_meta_data) values
   ('10000000-0000-0000-0000-000000000031', 'journey-a@example.test', '{"name":"Journey A"}'::jsonb),
   ('10000000-0000-0000-0000-000000000032', 'journey-b@example.test', '{"name":"Journey B"}'::jsonb),
