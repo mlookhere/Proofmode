@@ -275,6 +275,13 @@ begin
   if actor_id is null then raise exception 'authentication required'; end if;
   if clean_media is null then raise exception 'media required'; end if;
   if target_proof_type not in ('photo', 'video', 'link', 'screenshot') then raise exception 'invalid proof type'; end if;
+  if not exists (
+    select 1
+    from storage.objects o
+    where o.bucket_id = 'proof-media'
+      and o.name = clean_media
+      and (storage.foldername(o.name))[1] = actor_id::text
+  ) then raise exception 'proof media not found'; end if;
 
   journey_id := private.ensure_journey_v1(target_challenge);
   insert into public.proofs (
@@ -583,7 +590,6 @@ begin
     'proof_score', (
       (select count(*)::int from visible_proofs where verified) * 10
       + (select count(*)::int from visible_proofs) * 2
-      + (select n from recruits) * 5
     ),
     'completed_drops', (select n from completed),
     'current_streak', coalesce((
