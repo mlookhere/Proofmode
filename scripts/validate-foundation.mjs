@@ -27,6 +27,7 @@ assert(JSON.stringify(migrations) === JSON.stringify([
   "010_social_actions.sql",
   "011_social_unblock_visibility.sql",
   "012_social_read_privacy.sql",
+  "013_social_rpc_boundary.sql",
 ]), `Unexpected migration set: ${migrations.join(", ")}`);
 
 const templatesSql = await read("supabase/migrations/004_template_library.sql");
@@ -133,6 +134,39 @@ requireAll(socialPrivacySql, [
 ], "Social privacy migration");
 assert(socialPrivacySql.includes("order by r.score desc, r.published_at desc, r.post_id desc"), "Social privacy feed changed cursor ordering");
 assert(!socialPrivacySql.includes("now() - p.published_at"), "Social privacy feed must preserve deterministic score");
+
+const rpcBoundarySql = await read("supabase/migrations/013_social_rpc_boundary.sql");
+const privilegedSocialFunctions = [
+  "set_follow_v1(uuid, boolean)",
+  "set_post_reaction_v1(uuid, text)",
+  "create_comment_v1(uuid, text)",
+  "delete_comment_v1(uuid)",
+  "set_block_v1(uuid, boolean)",
+  "submit_report_v1(text, uuid, text, text)",
+  "get_post_comments_v1(uuid, int)",
+  "get_my_crews_v1()",
+  "get_crew_room_v1(uuid)",
+  "post_crew_message_v1(uuid, text)",
+  "delete_crew_message_v1(uuid)",
+  "create_crew_invite_v1(uuid)",
+  "get_my_blocks_v1()",
+];
+for (const signature of privilegedSocialFunctions) {
+  assert(rpcBoundarySql.includes(`alter function public.${signature} set schema private`), `Social RPC implementation remains exposed: ${signature}`);
+}
+requireAll(rpcBoundarySql, [
+  "security invoker set search_path = ''",
+  "select private.set_follow_v1",
+  "select private.set_post_reaction_v1",
+  "select private.create_comment_v1",
+  "select private.set_block_v1",
+  "select private.submit_report_v1",
+  "select * from private.get_post_comments_v1",
+  "select * from private.get_my_crews_v1",
+  "select private.get_crew_room_v1",
+  "select private.post_crew_message_v1",
+  "select private.get_my_blocks_v1",
+], "Social RPC boundary");
 
 const mobilePackage = JSON.parse(await read("mobile/package.json"));
 const mobileLock = JSON.parse(await read("mobile/package-lock.json"));
