@@ -17,7 +17,7 @@ import {
 } from "@/lib/media/server";
 
 const POST_KINDS = new Set(["proof", "fail", "almost", "comeback", "pr", "reset"]);
-const RECOVERABLE_MEDIA_STATES = new Set(["pending", "uploading", "failed"]);
+const RECOVERABLE_MEDIA_STATES = ["pending", "uploading", "failed"] as const;
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -96,9 +96,6 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (error) throw error;
       if (!asset || asset.owner_id !== user.id) throw new MediaApiError(404, "Upload not found");
-      if (!RECOVERABLE_MEDIA_STATES.has(asset.processing_status)) {
-        throw new MediaApiError(409, "Upload is no longer in a retryable state");
-      }
       if (asset.media_kind !== input.mediaKind || asset.mime_type !== input.mimeType) {
         throw new MediaApiError(409, "Selected media does not match the interrupted upload");
       }
@@ -111,13 +108,27 @@ export async function POST(request: Request) {
       if (postError) throw postError;
       if (!post || post.challenge_id !== input.challengeId) throw new MediaApiError(409, "Upload Drop changed; discard it and start again");
 
+      if (asset.processing_status === "processing" || asset.processing_status === "ready") {
+        return Response.json({ mediaId: asset.id, postId: post.id, provider: asset.provider, alreadyUploaded: true });
+      }
+      if (asset.processing_status === "deleted") {
+        throw new MediaApiError(409, "Upload was already discarded");
+      }
+      if (!RECOVERABLE_MEDIA_STATES.includes(asset.processing_status as (typeof RECOVERABLE_MEDIA_STATES)[number])) {
+        throw new MediaApiError(409, "Upload is no longer in a retryable state");
+      }
+
       if (asset.provider === "r2" && asset.storage_key) {
-        const { error: updateError } = await admin
+        const { data: claimed, error: updateError } = await admin
           .from("media_assets")
           .update({ processing_status: "uploading" })
           .eq("id", asset.id)
-          .eq("owner_id", user.id);
+          .eq("owner_id", user.id)
+          .in("processing_status", [...RECOVERABLE_MEDIA_STATES])
+          .select("id")
+          .maybeSingle();
         if (updateError) throw updateError;
+        if (!claimed) throw new MediaApiError(409, "Upload state changed; retry again");
         return Response.json({
           mediaId: asset.id,
           postId: post.id,
@@ -131,14 +142,18 @@ export async function POST(request: Request) {
       if (asset.provider === "stream") {
         const previousUid = asset.playback_id;
         const direct = await createStreamDirectUpload();
-        const { error: updateError } = await admin
+        const { data: claimed, error: updateError } = await admin
           .from("media_assets")
           .update({ playback_id: direct.uid, processing_status: "uploading" })
           .eq("id", asset.id)
-          .eq("owner_id", user.id);
-        if (updateError) {
+          .eq("owner_id", user.id)
+          .in("processing_status", [...RECOVERABLE_MEDIA_STATES])
+          .select("id")
+          .maybeSingle();
+        if (updateError || !claimed) {
           await deleteProviderAsset({ provider: "stream", storage_key: null, playback_id: direct.uid }).catch(console.error);
-          throw updateError;
+          if (updateError) throw updateError;
+          throw new MediaApiError(409, "Upload state changed; retry again");
         }
         if (previousUid) {
           await deleteProviderAsset({ provider: "stream", storage_key: null, playback_id: previousUid }).catch(console.error);
