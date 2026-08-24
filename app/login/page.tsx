@@ -17,6 +17,11 @@ export default function LoginPage() {
     const supabase = createBrowserClient(url, key);
     const next = new URLSearchParams(window.location.search).get("next") || "/dashboard";
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+    await fetch("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventName: "signup_started", source: "auth", properties: { next } }),
+    }).catch(() => undefined);
     const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
     setMessage(error ? error.message : "Magic link sent. Check your inbox.");
     setLoading(false);
