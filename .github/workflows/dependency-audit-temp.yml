@@ -3,17 +3,21 @@ name: Temporary Dependency Audit
 on:
   push:
     branches: [work/16-lock-audit-root-dependencies]
+  pull_request:
+    branches: [dev]
 
 permissions:
   contents: write
 
 jobs:
   audit:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && (github.event_name != 'pull_request' || github.head_ref == 'work/16-lock-audit-root-dependencies')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22.13.0
