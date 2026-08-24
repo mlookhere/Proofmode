@@ -10,8 +10,7 @@ insert into auth.users (id, email, raw_user_meta_data) values
   ('10000000-0000-0000-0000-000000000053', 'black-m1@example.test', '{}'::jsonb),
   ('10000000-0000-0000-0000-000000000054', 'black-m2@example.test', '{}'::jsonb),
   ('10000000-0000-0000-0000-000000000055', 'black-m3@example.test', '{}'::jsonb),
-  ('10000000-0000-0000-0000-000000000056', 'black-m4@example.test', '{}'::jsonb),
-  ('10000000-0000-0000-0000-000000000057', 'black-m5@example.test', '{}'::jsonb);
+  ('10000000-0000-0000-0000-000000000056', 'black-m4@example.test', '{}'::jsonb);
 
 update public.profiles set handle = 'hardening-a' where id = '10000000-0000-0000-0000-000000000041';
 update public.profiles set handle = 'black-owner', plan = 'black' where id = '10000000-0000-0000-0000-000000000051';
@@ -23,13 +22,13 @@ insert into public.challenges (
   ('20000000-0000-0000-0000-000000000041', '10000000-0000-0000-0000-000000000041', 'Hardening Drop', 'hardening-drop', 'Post proof.', 7, 'public', 'drop', 25, 5),
   ('20000000-0000-0000-0000-000000000051', '10000000-0000-0000-0000-000000000051', 'Black Capacity Drop', 'black-capacity-drop', 'Join beyond five.', 7, 'public', 'drop', 100000, 5);
 
+-- Challenge creation already adds the owner as the first member. Add four more
+-- so the Black-owned Drop has exactly five members before the join-under-test.
 insert into public.challenge_members (challenge_id, user_id, role) values
-  ('20000000-0000-0000-0000-000000000041', '10000000-0000-0000-0000-000000000041', 'member'),
   ('20000000-0000-0000-0000-000000000051', '10000000-0000-0000-0000-000000000053', 'member'),
   ('20000000-0000-0000-0000-000000000051', '10000000-0000-0000-0000-000000000054', 'member'),
   ('20000000-0000-0000-0000-000000000051', '10000000-0000-0000-0000-000000000055', 'member'),
-  ('20000000-0000-0000-0000-000000000051', '10000000-0000-0000-0000-000000000056', 'member'),
-  ('20000000-0000-0000-0000-000000000051', '10000000-0000-0000-0000-000000000057', 'member');
+  ('20000000-0000-0000-0000-000000000051', '10000000-0000-0000-0000-000000000056', 'member');
 
 insert into public.posts (
   id, user_id, challenge_id, kind, caption, visibility, status, moderation_status
