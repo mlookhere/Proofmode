@@ -28,6 +28,7 @@ assert(JSON.stringify(migrations) === JSON.stringify([
   "011_social_unblock_visibility.sql",
   "012_social_read_privacy.sql",
   "013_social_rpc_boundary.sql",
+  "014_social_performance_hardening.sql",
 ]), `Unexpected migration set: ${migrations.join(", ")}`);
 
 const templatesSql = await read("supabase/migrations/004_template_library.sql");
@@ -167,6 +168,14 @@ requireAll(rpcBoundarySql, [
   "select private.post_crew_message_v1",
   "select * from private.get_my_blocks_v1",
 ], "Social RPC boundary");
+
+const socialPerformanceSql = await read("supabase/migrations/014_social_performance_hardening.sql");
+requireAll(socialPerformanceSql, [
+  "crew_messages_user_idx",
+  "private.is_blocked_pair((select auth.uid()), user_id)",
+  "user_id = (select auth.uid())",
+  "id = (select auth.uid())",
+], "Social performance hardening");
 
 const mobilePackage = JSON.parse(await read("mobile/package.json"));
 const mobileLock = JSON.parse(await read("mobile/package-lock.json"));
