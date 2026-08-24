@@ -315,7 +315,7 @@ begin
     challenge_id, user_id, proof_type, media_url, caption, proof_date,
     post_id, journey_id, media_asset_id
   ) values (
-    new.challenge_id, new.user_id, legacy_type, media_url, new.caption, receipt_date,
+    new.challenge_id, new.user_id, legacy_type, media_url, left(new.caption, 280), receipt_date,
     new.id, new.journey_id, new.media_asset_id
   )
   on conflict (challenge_id, user_id, proof_date) do nothing
