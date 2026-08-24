@@ -51,8 +51,8 @@ returns boolean language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function private.can_view_journey_v1(uuid) from public, anon, authenticated;
 
-drop policy if exists "journeys visible by audience" on public.journeys;
-create policy "journeys visible by audience" on public.journeys for select
+drop policy if exists "visible journeys" on public.journeys;
+create policy "visible journeys" on public.journeys for select
 using (private.can_view_journey_v1(id));
 
 drop policy if exists "journey follows caller read" on public.journey_follows;
