@@ -35,6 +35,13 @@ export async function POST(request: Request) {
     if (error) throw error;
     if (!asset) return Response.json({ ok: true, ignored: true });
 
+    if (asset.processing_status === "deleted") {
+      return Response.json({ ok: true, ignored: true, status: "deleted" });
+    }
+    if (asset.processing_status === "ready") {
+      return Response.json({ ok: true, ignored: true, status: "ready" });
+    }
+
     const state = payload.status?.state || "";
     const duration = Number.isFinite(payload.duration) ? Number(payload.duration) : null;
     const bytes = Number.isFinite(payload.size) ? Number(payload.size) : null;
@@ -43,7 +50,8 @@ export async function POST(request: Request) {
       const { error: updateError } = await admin
         .from("media_assets")
         .update({ processing_status: "failed" })
-        .eq("id", asset.id);
+        .eq("id", asset.id)
+        .in("processing_status", ["pending", "uploading", "processing", "failed"]);
       if (updateError) throw updateError;
       return Response.json({ ok: true, rejected: "limits" });
     }
@@ -61,7 +69,8 @@ export async function POST(request: Request) {
           width: payload.input?.width ?? null,
           height: payload.input?.height ?? null,
         })
-        .eq("id", asset.id);
+        .eq("id", asset.id)
+        .in("processing_status", ["pending", "uploading", "processing", "failed"]);
       if (updateError) throw updateError;
       return Response.json({ ok: true, status: "ready" });
     }
@@ -70,19 +79,21 @@ export async function POST(request: Request) {
       const { error: updateError } = await admin
         .from("media_assets")
         .update({ processing_status: "failed" })
-        .eq("id", asset.id);
+        .eq("id", asset.id)
+        .in("processing_status", ["pending", "uploading", "processing", "failed"]);
       if (updateError) throw updateError;
       return Response.json({ ok: true, status: "failed" });
     }
 
-    if (asset.processing_status !== "processing") {
+    if (asset.processing_status !== "processing" && asset.processing_status !== "failed") {
       const { error: updateError } = await admin
         .from("media_assets")
         .update({ processing_status: "processing" })
-        .eq("id", asset.id);
+        .eq("id", asset.id)
+        .in("processing_status", ["pending", "uploading"]);
       if (updateError) throw updateError;
     }
-    return Response.json({ ok: true, status: "processing" });
+    return Response.json({ ok: true, status: asset.processing_status === "failed" ? "failed" : "processing" });
   } catch (error) {
     return asMediaApiResponse(error);
   }
