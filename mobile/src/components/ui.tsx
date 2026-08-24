@@ -47,12 +47,13 @@ type PrimaryButtonProps = {
   children: ReactNode;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 };
 
-export function PrimaryButton({ children, onPress, style }: PrimaryButtonProps) {
+export function PrimaryButton({ children, onPress, style, textStyle }: PrimaryButtonProps) {
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={[styles.primaryButton, style]}>
-      <Text style={styles.primaryButtonText}>{children}</Text>
+      <Text style={[styles.primaryButtonText, textStyle]}>{children}</Text>
     </Pressable>
   );
 }
