@@ -8,6 +8,7 @@ import {
   MAX_VIDEO_BYTES,
   MAX_VIDEO_SECONDS,
   clearPendingUpload,
+  createResetToken,
   createUploadIntent,
   discardPendingUpload,
   finalizeUpload,
@@ -86,6 +87,7 @@ export default function Create() {
   const { session, isLoading } = useAuth();
   const userId = session?.user.id ?? null;
   const [mode, setMode] = useState<PostMode["title"]>("proof");
+  const [resetToken, setResetToken] = useState<string | null>(null);
   const [challenges, setChallenges] = useState<readonly PublicChallenge[]>([]);
   const [challengeId, setChallengeId] = useState("");
   const [caption, setCaption] = useState("");
@@ -103,6 +105,7 @@ export default function Create() {
     setChallenges([]);
     setChallengeId("");
     setCaption("");
+    setResetToken(null);
     setMedia((current) => {
       if (current) void removePersistedMedia(current.uri);
       return null;
@@ -162,7 +165,9 @@ export default function Create() {
     setError(null);
     setStatus(null);
 
-    const draft: UploadDraft = { challengeId, kind: mode, caption: caption.trim(), media };
+    const nextResetToken = mode === "reset" ? (resetToken ?? createResetToken()) : null;
+    if (mode === "reset" && !resetToken) setResetToken(nextResetToken);
+    const draft: UploadDraft = { challengeId, kind: mode, caption: caption.trim(), media, resetToken: nextResetToken };
     let interrupted: PendingUpload | null = null;
     try {
       const intent = await createUploadIntent(draft);
@@ -174,6 +179,7 @@ export default function Create() {
       setPending(null);
       setMedia(null);
       setCaption("");
+      setResetToken(null);
       setProgress(0);
       setStatus(completionMessage(result.status));
     } catch (cause) {
@@ -194,6 +200,7 @@ export default function Create() {
       await clearPendingUpload(pending);
       setPending(null);
       setMedia(null);
+      setResetToken(null);
       setProgress(0);
       setStatus(completionMessage(result.status));
     } catch (cause) {
@@ -210,6 +217,7 @@ export default function Create() {
     try {
       await discardPendingUpload(pending);
       setPending(null);
+      setResetToken(null);
       setProgress(0);
       setStatus("Interrupted upload discarded.");
     } catch (cause) {
@@ -248,7 +256,10 @@ export default function Create() {
                 key={item.title}
                 accessibilityRole="button"
                 accessibilityState={{ selected: mode === item.title }}
-                onPress={() => setMode(item.title)}
+                onPress={() => {
+                  setMode(item.title);
+                  setResetToken(item.title === "reset" ? createResetToken() : null);
+                }}
                 style={[styles.mode, mode === item.title && styles.modeSelected]}
               >
                 <Text style={styles.modeIcon}>{item.icon}</Text>
@@ -265,7 +276,10 @@ export default function Create() {
               key={challenge.id}
               accessibilityRole="button"
               accessibilityState={{ selected: challengeId === challenge.id }}
-              onPress={() => setChallengeId(challenge.id)}
+              onPress={() => {
+                if (challengeId !== challenge.id && mode === "reset") setResetToken(createResetToken());
+                setChallengeId(challenge.id);
+              }}
               style={[styles.challenge, challengeId === challenge.id && styles.challengeSelected]}
             >
               <Text style={styles.challengeEmoji}>{challenge.coverEmoji || "✓"}</Text>
@@ -313,7 +327,7 @@ export default function Create() {
             onPress={() => void publish()}
             style={[styles.publish, (busy || !media || !challengeId) && styles.disabled]}
           >
-            {busy ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.primaryText}>POST PROOF</Text>}
+            {busy ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.primaryText}>POST {mode.toUpperCase()}</Text>}
           </Pressable>
         </>
       )}
