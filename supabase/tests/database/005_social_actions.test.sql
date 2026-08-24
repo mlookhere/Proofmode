@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(45);
+select plan(47);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('10000000-0000-0000-0000-000000000021', 'social-a@example.test', '{"name":"Social A"}'::jsonb),
@@ -82,6 +82,38 @@ select is(public.delete_crew_message_v1((select id from public.crew_messages whe
 select throws_ok($$insert into public.comments (post_id, user_id, body) values ('30000000-0000-0000-0000-000000000021', '10000000-0000-0000-0000-000000000022', 'bypass')$$, '42501', null, 'direct social mutation is denied');
 select throws_like($$select public.submit_report_v1('user', '10000000-0000-0000-0000-000000000022', 'other', null)$$, '%report target not visible%', 'self report is rejected');
 select is((select count(*)::int from public.get_feed_v1(20, null, null, null) where post_id = '30000000-0000-0000-0000-000000000021'), 1, 'unblocked author returns to feed');
+
+select ok(
+  not exists (
+    select 1
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = any(array[
+        'set_follow_v1','set_post_reaction_v1','create_comment_v1','delete_comment_v1','set_block_v1',
+        'submit_report_v1','get_post_comments_v1','get_my_crews_v1','get_crew_room_v1','post_crew_message_v1',
+        'delete_crew_message_v1','create_crew_invite_v1','get_my_blocks_v1'
+      ])
+      and p.prosecdef
+  ),
+  'public Social Actions RPCs are invoker-only wrappers'
+);
+select is(
+  (
+    select count(*)::int
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'private'
+      and p.proname = any(array[
+        'set_follow_v1','set_post_reaction_v1','create_comment_v1','delete_comment_v1','set_block_v1',
+        'submit_report_v1','get_post_comments_v1','get_my_crews_v1','get_crew_room_v1','post_crew_message_v1',
+        'delete_crew_message_v1','create_crew_invite_v1','get_my_blocks_v1'
+      ])
+      and p.prosecdef
+  ),
+  13,
+  'privileged Social Actions implementations live in private schema'
+);
 
 select set_config('request.jwt.claims', '{"sub":"10000000-0000-0000-0000-000000000023","role":"authenticated"}', true);
 select throws_like($$select public.post_crew_message_v1('20000000-0000-0000-0000-000000000022', 'not a member')$$, '%crew not visible%', 'non-member cannot post to Crew room');
