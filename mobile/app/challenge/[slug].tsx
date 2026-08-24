@@ -10,6 +10,7 @@ import {
   type PublicChallenge,
 } from "@/api/challenges";
 import { useAuth } from "@/auth/session";
+import { ReportModal } from "@/components/report-modal";
 import { Eyebrow, PrimaryButton, Screen, Surface } from "@/components/ui";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { colors, radius, spacing } from "@/theme";
@@ -27,6 +28,7 @@ export default function ChallengeScreen() {
   const [viewerState, setViewerState] = useState<ChallengeViewerState>(emptyViewerState);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -88,6 +90,15 @@ export default function ChallengeScreen() {
     void runAction(action);
   }, [action, challenge, runAction, session]);
 
+  function openReport() {
+    if (!challenge) return;
+    if (!session) {
+      router.push({ pathname: "/auth", params: { returnTo: `/challenge/${challenge.slug}` } });
+      return;
+    }
+    setReportOpen(true);
+  }
+
   if (!isSupabaseConfigured) {
     return (
       <Screen contentStyle={styles.centered}>
@@ -113,34 +124,39 @@ export default function ChallengeScreen() {
   }
 
   return (
-    <Screen>
-      <Eyebrow>PUBLIC DROP</Eyebrow>
-      <Text style={styles.emoji}>{challenge.coverEmoji ?? "⚡"}</Text>
-      <Text style={styles.title}>{challenge.title.toUpperCase()}</Text>
-      <Text style={styles.copy}>{challenge.tagline ?? challenge.rule}</Text>
+    <>
+      <Screen>
+        <Eyebrow>PUBLIC DROP</Eyebrow>
+        <Text style={styles.emoji}>{challenge.coverEmoji ?? "⚡"}</Text>
+        <Text style={styles.title}>{challenge.title.toUpperCase()}</Text>
+        <Text style={styles.copy}>{challenge.tagline ?? challenge.rule}</Text>
 
-      <Surface style={styles.details}>
-        <Text style={styles.detailLabel}>THE RULE</Text>
-        <Text style={styles.detailValue}>{challenge.rule}</Text>
-        <View style={styles.metaRow}>
-          <Text style={styles.meta}>{challenge.durationDays} DAYS</Text>
-          <Text style={styles.meta}>{challenge.category.toUpperCase()}</Text>
+        <Surface style={styles.details}>
+          <Text style={styles.detailLabel}>THE RULE</Text>
+          <Text style={styles.detailValue}>{challenge.rule}</Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.meta}>{challenge.durationDays} DAYS</Text>
+            <Text style={styles.meta}>{challenge.category.toUpperCase()}</Text>
+          </View>
+        </Surface>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <View style={styles.actions}>
+          <PrimaryButton onPress={isMutating || viewerState.joined ? undefined : () => void runAction("join")}>
+            {viewerState.joined ? "JOINED" : isMutating ? "WORKING…" : "JOIN DROP"}
+          </PrimaryButton>
+          <PrimaryButton onPress={isMutating ? undefined : () => void runAction("watch")} style={styles.secondaryButton}>
+            {viewerState.watched ? "UNWATCH" : "WATCH"}
+          </PrimaryButton>
+          <PrimaryButton onPress={openReport} style={styles.reportButton}>REPORT DROP</PrimaryButton>
         </View>
-      </Surface>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+        {!session ? <Text style={styles.note}>You can view this Drop without an account. Sign-in is only required when you Join, Watch, or Report.</Text> : null}
+      </Screen>
 
-      <View style={styles.actions}>
-        <PrimaryButton onPress={isMutating || viewerState.joined ? undefined : () => void runAction("join")}>
-          {viewerState.joined ? "JOINED" : isMutating ? "WORKING…" : "JOIN DROP"}
-        </PrimaryButton>
-        <PrimaryButton onPress={isMutating ? undefined : () => void runAction("watch")} style={styles.secondaryButton}>
-          {viewerState.watched ? "UNWATCH" : "WATCH"}
-        </PrimaryButton>
-      </View>
-
-      {!session ? <Text style={styles.note}>You can view this Drop without an account. Sign-in is only required when you Join or Watch.</Text> : null}
-    </Screen>
+      <ReportModal visible={reportOpen} targetType="challenge" targetId={challenge.id} onClose={() => setReportOpen(false)} />
+    </>
   );
 }
 
@@ -156,6 +172,7 @@ const styles = StyleSheet.create({
   meta: { color: colors.text, backgroundColor: colors.panel2, paddingHorizontal: 10, paddingVertical: 8, borderRadius: radius.sm, fontSize: 10, fontWeight: "900", overflow: "hidden" },
   actions: { gap: spacing.md, marginTop: spacing.xl },
   secondaryButton: { backgroundColor: colors.panel2, borderColor: colors.line, borderWidth: 1 },
+  reportButton: { backgroundColor: "transparent", borderColor: colors.line, borderWidth: 1 },
   error: { color: colors.danger, lineHeight: 20, marginTop: spacing.lg },
   note: { color: colors.muted, lineHeight: 20, marginTop: spacing.lg },
 });
