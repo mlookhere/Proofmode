@@ -1,5 +1,7 @@
 import { STALE_UPLOAD_HOURS, adminClient, asMediaApiResponse, deleteProviderAsset } from "@/lib/media/server";
 
+const CLEANABLE_STATES = ["pending", "uploading", "processing", "failed"] as const;
+
 export async function GET(request: Request) {
   try {
     const secret = process.env.CRON_SECRET?.trim();
@@ -12,7 +14,7 @@ export async function GET(request: Request) {
     const { data: assets, error } = await admin
       .from("media_assets")
       .select("id, provider, storage_key, playback_id, processing_status")
-      .in("processing_status", ["pending", "uploading", "processing", "failed"])
+      .in("processing_status", [...CLEANABLE_STATES])
       .lt("updated_at", cutoff)
       .order("updated_at", { ascending: true })
       .limit(50);
@@ -21,16 +23,26 @@ export async function GET(request: Request) {
     let deleted = 0;
     const failures: string[] = [];
     for (const asset of assets ?? []) {
+      const { data: claimed, error: claimError } = await admin
+        .from("media_assets")
+        .update({ processing_status: "deleted" })
+        .eq("id", asset.id)
+        .in("processing_status", [...CLEANABLE_STATES])
+        .lt("updated_at", cutoff)
+        .select("id")
+        .maybeSingle();
+      if (claimError) throw claimError;
+      if (!claimed) continue;
+
       try {
         await deleteProviderAsset(asset);
-        const { error: updateError } = await admin
-          .from("media_assets")
-          .update({ processing_status: "deleted" })
-          .eq("id", asset.id)
-          .in("processing_status", ["pending", "uploading", "processing", "failed"]);
-        if (updateError) throw updateError;
         deleted += 1;
       } catch (error) {
+        await admin
+          .from("media_assets")
+          .update({ processing_status: "failed", moderation_status: "pending" })
+          .eq("id", asset.id)
+          .eq("processing_status", "deleted");
         console.error("Media cleanup failed", asset.id, error);
         failures.push(asset.id);
       }
