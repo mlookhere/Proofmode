@@ -99,19 +99,16 @@ function validateBody(body: IntentBody) {
   } as const;
 }
 
-async function assignJourney(request: Request, input: ReturnType<typeof validateBody>) {
+async function assignPostJourney(request: Request, postId: string, input: ReturnType<typeof validateBody>) {
   const client = bearerClient(request);
-  const result = input.kind === "reset"
-    ? await client.rpc("reset_journey_v1", {
-        target_challenge: input.challengeId,
-        request_token: input.resetToken,
-      })
-    : await client.rpc("ensure_journey_v1", { target_challenge: input.challengeId });
-
-  if (result.error || typeof result.data !== "string") {
-    throw new MediaApiError(409, result.error?.message || "Could not assign this post to a Journey");
+  const { data, error } = await client.rpc("assign_post_journey_v1", {
+    target_post: postId,
+    request_token: input.kind === "reset" ? input.resetToken : null,
+  });
+  if (error || typeof data !== "string") {
+    throw new MediaApiError(409, error?.message || "Could not assign this post to a Journey");
   }
-  return result.data;
+  return data;
 }
 
 export async function POST(request: Request) {
@@ -143,20 +140,7 @@ export async function POST(request: Request) {
         throw new MediaApiError(409, "Interrupted post details changed; discard it and start again");
       }
 
-      let journeyId = post.journey_id as string | null;
-      if (!journeyId) {
-        journeyId = await assignJourney(request, input);
-        const { data: linked, error: linkError } = await admin
-          .from("posts")
-          .update({ journey_id: journeyId })
-          .eq("id", post.id)
-          .eq("user_id", user.id)
-          .is("journey_id", null)
-          .select("id")
-          .maybeSingle();
-        if (linkError) throw linkError;
-        if (!linked) throw new MediaApiError(409, "Interrupted post Journey changed; retry again");
-      }
+      const journeyId = post.journey_id || await assignPostJourney(request, post.id, input);
 
       if (asset.processing_status === "processing" || asset.processing_status === "ready") {
         return Response.json({ mediaId: asset.id, postId: post.id, journeyId, provider: asset.provider, alreadyUploaded: true });
@@ -223,7 +207,6 @@ export async function POST(request: Request) {
     }
 
     await assertUploadRate(admin, user.id);
-    const journeyId = await assignJourney(request, input);
     const mediaId = randomUUID();
     const postId = randomUUID();
     const provider = input.mediaKind === "image" ? "r2" : "stream";
@@ -267,7 +250,7 @@ export async function POST(request: Request) {
       id: postId,
       user_id: user.id,
       challenge_id: input.challengeId,
-      journey_id: journeyId,
+      journey_id: null,
       media_asset_id: mediaId,
       kind: input.kind,
       caption: input.caption || null,
@@ -279,6 +262,16 @@ export async function POST(request: Request) {
       await admin.from("media_assets").delete().eq("id", mediaId);
       await deleteProviderAsset({ provider, storage_key: storageKey, playback_id: playbackId }).catch(() => undefined);
       throw postError;
+    }
+
+    let journeyId: string;
+    try {
+      journeyId = await assignPostJourney(request, postId, input);
+    } catch (error) {
+      await admin.from("posts").delete().eq("id", postId);
+      await admin.from("media_assets").delete().eq("id", mediaId);
+      await deleteProviderAsset({ provider, storage_key: storageKey, playback_id: playbackId }).catch(() => undefined);
+      throw error;
     }
 
     return Response.json({

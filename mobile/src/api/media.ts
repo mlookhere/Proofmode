@@ -148,6 +148,10 @@ export async function createUploadIntent(draft: UploadDraft, resumeMediaId: stri
   }) as Promise<UploadIntent>;
 }
 
+export async function discardUploadIntent(mediaId: string) {
+  await api(`/api/media/assets/${encodeURIComponent(mediaId)}`, { method: "DELETE" });
+}
+
 export async function savePendingUpload(draft: UploadDraft, intent: UploadIntent) {
   const userId = (await session()).user.id;
   const pending: PendingUpload = {
@@ -285,6 +289,6 @@ export async function retryPendingUpload(pending: PendingUpload, onProgress: (pr
 export async function discardPendingUpload(pending: PendingUpload) {
   const currentUserId = (await session()).user.id;
   if (pending.userId !== currentUserId) throw new Error("This interrupted upload belongs to a different account.");
-  await api(`/api/media/assets/${encodeURIComponent(pending.mediaId)}`, { method: "DELETE" });
+  await discardUploadIntent(pending.mediaId);
   await clearPendingUpload(pending);
 }

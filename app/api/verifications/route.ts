@@ -5,8 +5,9 @@ export async function POST(request: Request) {
   if (!hasSupabaseEnv()) return NextResponse.json({ ok: true, demo: true });
   const body = await request.json();
   const proofId = String(body.proofId || "");
-  const verdict = body.verdict === true;
   if (!proofId) return NextResponse.json({ error: "proofId is required" }, { status: 400 });
+  if (typeof body.verdict !== "boolean") return NextResponse.json({ error: "verdict must be a boolean" }, { status: 400 });
+  const verdict = body.verdict;
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
