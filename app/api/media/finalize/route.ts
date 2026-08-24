@@ -4,6 +4,7 @@ import {
   MediaApiError,
   adminClient,
   asMediaApiResponse,
+  assertPublicChallengeMembership,
   r2PublicUrl,
   readR2Object,
   requireBearerUser,
@@ -24,26 +25,40 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (error) throw error;
     if (!asset || asset.owner_id !== user.id) throw new MediaApiError(404, "Upload not found");
+    if (asset.processing_status === "deleted") throw new MediaApiError(409, "Upload was discarded");
+
+    const { data: initialPost, error: initialPostError } = await admin
+      .from("posts")
+      .select("id, user_id, challenge_id")
+      .eq("media_asset_id", mediaId)
+      .maybeSingle();
+    if (initialPostError) throw initialPostError;
+    if (!initialPost || initialPost.user_id !== user.id || !initialPost.challenge_id) {
+      throw new MediaApiError(409, "Upload has no valid Drop post");
+    }
+    await assertPublicChallengeMembership(admin, user.id, initialPost.challenge_id);
 
     if (asset.provider === "r2") {
       if (!asset.storage_key) throw new MediaApiError(409, "Image upload has no storage key");
-      const remote = await readR2Object(asset.storage_key);
-      if (!remote.bytes || remote.bytes <= 0) throw new MediaApiError(409, "Image upload is incomplete");
-      if (remote.bytes > MAX_IMAGE_BYTES) throw new MediaApiError(413, "Image exceeds the 20 MB limit");
-      const mimeType = remote.mimeType?.toLowerCase() || asset.mime_type?.toLowerCase() || "";
-      if (!IMAGE_MIME_TYPES.has(mimeType)) throw new MediaApiError(415, "Uploaded image type is not allowed");
+      if (asset.processing_status !== "ready") {
+        const remote = await readR2Object(asset.storage_key);
+        if (!remote.bytes || remote.bytes <= 0) throw new MediaApiError(409, "Image upload is incomplete");
+        if (remote.bytes > MAX_IMAGE_BYTES) throw new MediaApiError(413, "Image exceeds the 20 MB limit");
+        const mimeType = remote.mimeType?.toLowerCase() || asset.mime_type?.toLowerCase() || "";
+        if (!IMAGE_MIME_TYPES.has(mimeType)) throw new MediaApiError(415, "Uploaded image type is not allowed");
 
-      const { error: updateError } = await admin
-        .from("media_assets")
-        .update({
-          bytes: remote.bytes,
-          mime_type: mimeType,
-          public_url: r2PublicUrl(asset.storage_key),
-          processing_status: "ready",
-        })
-        .eq("id", mediaId)
-        .eq("owner_id", user.id);
-      if (updateError) throw updateError;
+        const { error: updateError } = await admin
+          .from("media_assets")
+          .update({
+            bytes: remote.bytes,
+            mime_type: mimeType,
+            public_url: r2PublicUrl(asset.storage_key),
+            processing_status: "ready",
+          })
+          .eq("id", mediaId)
+          .eq("owner_id", user.id);
+        if (updateError) throw updateError;
+      }
     } else if (asset.provider === "stream") {
       if (asset.processing_status === "uploading") {
         const { error: updateError } = await admin
@@ -60,7 +75,7 @@ export async function POST(request: Request) {
     const { data: post, error: postError } = await admin
       .from("posts")
       .select("id, status, moderation_status")
-      .eq("media_asset_id", mediaId)
+      .eq("id", initialPost.id)
       .maybeSingle();
     if (postError) throw postError;
     if (!post) throw new MediaApiError(409, "Upload has no post");
