@@ -13,6 +13,7 @@ type FeedRow = Readonly<{
   challenge_id: string | null;
   challenge_slug: string | null;
   challenge_title: string | null;
+  journey_id: string | null;
   proof_id: string | null;
   media_kind: "image" | "video" | null;
   media_public_url: string | null;
@@ -76,6 +77,7 @@ function toFeedPost(row: FeedRow): FeedPost {
     handle,
     challengeId: row.challenge_id,
     challengeSlug: row.challenge_slug,
+    journeyId: row.journey_id,
     challenge: row.challenge_title || "PROOFMODE",
     value: displayMark(kind),
     caption: row.caption?.trim() || "Proof posted.",
@@ -84,7 +86,7 @@ function toFeedPost(row: FeedRow): FeedPost {
     comments: Number(row.comment_count) || 0,
     viewerFollows: Boolean(row.viewer_follows),
     viewerReaction: row.viewer_reaction,
-    action: row.challenge_id ? "VIEW CHALLENGE" : row.proof_id ? "VIEW PROOF" : "VIEW POST",
+    action: row.journey_id ? "VIEW JOURNEY" : row.challenge_id ? "VIEW CHALLENGE" : row.proof_id ? "VIEW PROOF" : "VIEW POST",
     media,
   };
 }
