@@ -95,6 +95,8 @@ assert(mobileFeed.includes("media_public_url") && mobileFeed.includes("media_kin
 const mobileHome = await read("mobile/app/(tabs)/index.tsx");
 assert(mobileHome.includes("onEndReached"), "Mobile Home infinite scroll is missing");
 assert(mobileHome.includes("onViewableItemsChanged") && mobileHome.includes("activePostId"), "Home does not pause off-screen video");
+assert(mobileHome.includes("useFocusEffect") && mobileHome.includes("feedFocused && activePostId"), "Home video can continue playing while the tab is blurred");
+assert(mobileHome.includes('media?.kind === "video"'), "Home viewability should only activate visible video posts");
 const feedCard = await read("mobile/src/components/feed-card.tsx");
 assert(feedCard.includes("VideoView") && feedCard.includes("useVideoPlayer"), "Feed card does not render video");
 assert(feedCard.includes("<Image"), "Feed card does not render images");
@@ -112,10 +114,12 @@ const mobileCreate = await read("mobile/app/(tabs)/create.tsx");
 for (const required of ["launchCameraAsync", "launchImageLibraryAsync", "MAX_VIDEO_SECONDS", "loadPendingUpload", "retryPendingUpload", "POST PROOF"]) {
   assert(mobileCreate.includes(required), `Mobile Create is missing: ${required}`);
 }
+assert(mobileCreate.includes("const userId = session?.user.id") && mobileCreate.includes("setChallengeId(joined[0]?.id || \"\")"), "Composer state is not reset safely across account changes");
 const mobileMedia = await read("mobile/src/api/media.ts");
-for (const required of ["createUploadTask", "BINARY_CONTENT", "MULTIPART", "proofmode.pending-media-upload.v1", "/api/media/upload-intent", "/api/media/finalize"]) {
+for (const required of ["createUploadTask", "BINARY_CONTENT", "MULTIPART", "proofmode.pending-media-upload.v2", "/api/media/upload-intent", "/api/media/finalize"]) {
   assert(mobileMedia.includes(required), `Mobile media client is missing: ${required}`);
 }
+assert(mobileMedia.includes("pendingUploadKey(userId)") && mobileMedia.includes("pending.userId !== currentUserId"), "Interrupted upload state is not account scoped");
 assert(!/SUPABASE_SERVICE_ROLE_KEY|CLOUDFLARE_[A-Z_]+/.test(mobileMedia), "Server media credentials leaked into mobile code");
 
 for (const route of [
@@ -129,12 +133,20 @@ const mediaServer = await read("lib/media/server.ts");
 for (const required of ["requireBearerUser", "SUPABASE_SERVICE_ROLE_KEY", "getSignedUrl", "timingSafeEqual", "MAX_VIDEO_BYTES", "MAX_VIDEO_SECONDS"]) {
   assert(mediaServer.includes(required), `Media backend is missing: ${required}`);
 }
+assert(mediaServer.includes("challenges!inner(visibility,format)") && mediaServer.includes('challenge?.format !== "drop"'), "Media authorization does not require a public Drop");
 const uploadIntent = await read("app/api/media/upload-intent/route.ts");
 assert(uploadIntent.includes("assertPublicChallengeMembership") && uploadIntent.includes("assertUploadRate"), "Upload intent authorization/rate limit is incomplete");
+assert(uploadIntent.includes("RECOVERABLE_MEDIA_STATES") && uploadIntent.includes("Upload is no longer in a retryable state"), "Interrupted upload resume can regress terminal media state");
+assert(uploadIntent.includes("playback_id: direct.uid") && uploadIntent.includes("playback_id: previousUid"), "Stream retry cleanup is incomplete");
+const finalize = await read("app/api/media/finalize/route.ts");
+assert(finalize.includes("assertPublicChallengeMembership") && finalize.includes("initialPost.challenge_id"), "Finalize does not reauthorize current Drop membership");
+assert(finalize.includes('asset.processing_status === "deleted"'), "Finalize can revive discarded media");
 const streamWebhook = await read("app/api/media/stream/webhook/route.ts");
 assert(streamWebhook.includes("verifyStreamWebhook") && streamWebhook.includes('processing_status: "ready"'), "Stream webhook lifecycle is incomplete");
+assert(streamWebhook.includes('asset.processing_status === "deleted"') && streamWebhook.includes('asset.processing_status === "ready"'), "Late Stream webhooks can regress terminal media state");
 const cleanup = await read("app/api/media/cleanup/route.ts");
 assert(cleanup.includes("CRON_SECRET") && cleanup.includes('processing_status: "deleted"'), "Media cleanup is not protected or stateful");
+assert(cleanup.includes('["pending", "uploading", "processing", "failed"]'), "Cleanup does not recover stuck processing uploads");
 const vercel = JSON.parse(await read("vercel.json"));
 assert(vercel.crons?.some((cron) => cron.path === "/api/media/cleanup"), "Vercel media cleanup cron is missing");
 
