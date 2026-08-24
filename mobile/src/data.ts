@@ -1,10 +1,10 @@
 import type { ChallengeTemplate, FeedPost, PostMode } from "@/domain";
 
 export const posts: readonly FeedPost[] = [
-  { id: "1", kind: "fail", day: "DAY 19", user: "Kyle", handle: "@kylelifts", challenge: "Road to 275", value: "275", caption: "275 said absolutely not. Posting it anyway. Tomorrow gets another vote.", accent: "#ff6a77", reactions: "18.4K", comments: "1.2K", action: "RUN IT BACK" },
-  { id: "2", kind: "proof", day: "DAY 63", user: "Maya", handle: "@mayamoves", challenge: "Run 1 Mile", value: "1.0 MI", caption: "Rain tried. Streak stayed.", accent: "#d7ff3f", reactions: "42.8K", comments: "2.7K", action: "TRY THIS" },
-  { id: "3", kind: "chaos", day: "DAY 4", user: "Noah", handle: "@noahcooksbadly", challenge: "Cook at Home", value: "🔥🍳", caption: "Smoke alarm: 1. Me: 0. Meal somehow edible.", accent: "#ffb55e", reactions: "67.1K", comments: "4.1K", action: "JOIN CHAOS" },
-  { id: "4", kind: "comeback", day: "RESET #3", user: "Tori", handle: "@torirestarts", challenge: "45 Minute Lock-In", value: "45:00", caption: "Missed two days. Did not delete the app. Back at the desk.", accent: "#84a8ff", reactions: "31.6K", comments: "3.4K", action: "FOLLOW" },
+  { id: "1", userId: "preview-kyle", kind: "fail", day: "DAY 19", user: "Kyle", handle: "@kylelifts", challengeId: null, challengeSlug: null, challenge: "Road to 275", value: "275", caption: "275 said absolutely not. Posting it anyway. Tomorrow gets another vote.", accent: "#ff6a77", reactions: 18_400, comments: 1_200, viewerFollows: false, viewerReaction: null, action: "RUN IT BACK" },
+  { id: "2", userId: "preview-maya", kind: "proof", day: "DAY 63", user: "Maya", handle: "@mayamoves", challengeId: null, challengeSlug: null, challenge: "Run 1 Mile", value: "1.0 MI", caption: "Rain tried. Streak stayed.", accent: "#d7ff3f", reactions: 42_800, comments: 2_700, viewerFollows: false, viewerReaction: null, action: "TRY THIS" },
+  { id: "3", userId: "preview-noah", kind: "chaos", day: "DAY 4", user: "Noah", handle: "@noahcooksbadly", challengeId: null, challengeSlug: null, challenge: "Cook at Home", value: "🔥🍳", caption: "Smoke alarm: 1. Me: 0. Meal somehow edible.", accent: "#ffb55e", reactions: 67_100, comments: 4_100, viewerFollows: false, viewerReaction: null, action: "JOIN CHAOS" },
+  { id: "4", userId: "preview-tori", kind: "comeback", day: "RESET #3", user: "Tori", handle: "@torirestarts", challengeId: null, challengeSlug: null, challenge: "45 Minute Lock-In", value: "45:00", caption: "Missed two days. Did not delete the app. Back at the desk.", accent: "#84a8ff", reactions: 31_600, comments: 3_400, viewerFollows: false, viewerReaction: null, action: "FOLLOW" },
 ];
 
 export const templates: readonly ChallengeTemplate[] = [
