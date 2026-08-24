@@ -5,7 +5,6 @@ import type { PostMode } from "@/domain";
 import { requireSupabase } from "@/lib/supabase";
 
 const PENDING_UPLOAD_KEY = "proofmode.pending-media-upload.v1";
-const PENDING_DIRECTORY = `${FileSystem.documentDirectory}proofmode-pending/`;
 
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
@@ -50,6 +49,11 @@ type UploadIntent = Readonly<{
   headers?: Record<string, string>;
 }>;
 
+function pendingDirectory() {
+  if (!FileSystem.documentDirectory) throw new Error("Persistent app storage is unavailable.");
+  return `${FileSystem.documentDirectory}proofmode-pending/`;
+}
+
 async function accessToken() {
   const { data, error } = await requireSupabase().auth.getSession();
   if (error) throw error;
@@ -85,16 +89,18 @@ function extensionForMime(mimeType: string) {
 }
 
 export async function persistSelectedMedia(media: Omit<SelectedMedia, "uri" | "fileName"> & { uri: string; fileName?: string | null }) {
-  if (!FileSystem.documentDirectory) throw new Error("Persistent app storage is unavailable.");
-  await FileSystem.makeDirectoryAsync(PENDING_DIRECTORY, { intermediates: true });
+  const directory = pendingDirectory();
+  await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
   const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extensionForMime(media.mimeType)}`;
-  const destination = `${PENDING_DIRECTORY}${fileName}`;
+  const destination = `${directory}${fileName}`;
   await FileSystem.copyAsync({ from: media.uri, to: destination });
   return { ...media, uri: destination, fileName } satisfies SelectedMedia;
 }
 
 export async function removePersistedMedia(uri: string) {
-  if (uri.startsWith(PENDING_DIRECTORY)) await FileSystem.deleteAsync(uri, { idempotent: true });
+  if (FileSystem.documentDirectory && uri.startsWith(pendingDirectory())) {
+    await FileSystem.deleteAsync(uri, { idempotent: true });
+  }
 }
 
 export async function createUploadIntent(draft: UploadDraft, resumeMediaId: string | null = null): Promise<UploadIntent> {
