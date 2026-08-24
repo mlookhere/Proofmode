@@ -7,7 +7,7 @@
 
 ### Implemented and verified
 - Expo SDK 57 mobile app with Home / Explore / Post / Crews / You.
-- Supabase migrations `001` through `009` are applied to the connected Proofmode staging project.
+- Supabase migrations `001` through `014` are applied to the connected Proofmode staging project.
 - The canonical launch library is enforced at exactly 60 challenge templates.
 - RLS-only `SECURITY DEFINER` helpers live in the non-exposed `private` schema instead of public RPC space.
 - The obsolete `join_public_challenge` RPC is removed; `join_challenge_v2` is the single join path.
@@ -16,9 +16,20 @@
 - Migration `008` centralizes media/post lifecycle transitions, prevents one media asset from backing multiple posts, keeps media mutation server-owned, and reuses `job_outbox` for moderation.
 - Staging verification confirms the migration-008 index/functions/triggers exist and authenticated clients can read `media_assets` but cannot insert, update, or delete them.
 - A rollback-only staging lifecycle smoke verified `ready → moderation_pending`, one deduplicated moderation job, and `approved → published` without leaving test data.
-- Supabase security-advisor output after the media/feed migrations is unchanged from the known intentional baseline.
+- Supabase security-advisor output after the media/feed/Social migrations is unchanged from the known intentional baseline.
 - Migration `009` explicitly excludes future-dated `published_at` rows from `get_feed_v1` without changing deterministic score or keyset ordering; rollback-only staging verification returned zero future rows and left no test data.
 - A staging consistency audit found zero published/unapproved mismatches, published posts backed by unready media, media/post owner mismatches, active orphan media, deleted-media/live-post mismatches, ready-approved unpublished posts, or due background jobs.
+- Social Actions migrations `010` through `014` are applied and verified on staging: RPC-owned follows/reactions/comments/block/report mutations, block-aware reads and aggregate privacy, Crew room messages/read models, invite creation, feed viewer relationship state, caller-only blocked-user listing, private privileged implementations, and Social-specific RLS/index performance hardening.
+- All six Social write tables use RLS and deny direct `INSERT`, `UPDATE`, and `DELETE` to both `anon` and `authenticated`; persisted Social changes are RPC-owned.
+- The 13 new Social Actions public RPCs are `SECURITY INVOKER` wrappers over privileged implementations in the non-exposed `private` schema with explicit role grants.
+- A hosted rollback-only Social Actions smoke passed all 47 transactional assertions covering follows, reaction switching/unreact, comment create/read/own-delete, block/unblock and visibility, report validation/idempotency, Crew room/thread/invites, direct-write denial, and non-member denial, then left zero fixture rows.
+- Migration `014` adds the covering `crew_messages.user_id` index and removes the Social-introduced auth init-plan advisor findings without broadening into unrelated legacy performance cleanup.
+- Home is wired to real follow/unfollow, the five canonical reactions, text comments, own-comment deletion, post/comment/user reporting, and block behavior. Signed-out users may read public content/comments but must authenticate before persisted interaction.
+- Public Drop detail includes report submission through the same reason taxonomy.
+- Crews reuses `challenges`, `challenge_members`, proofs/posts, and invites as the room/membership/activity model instead of adding parallel Crew membership tables. One `crew_messages` table supplies the lightweight room thread.
+- Crews tab loads signed-in Crew rooms; room detail includes members, proof-based leaderboard, recent activity, text thread, own-message deletion, and invite-code creation.
+- You includes a caller-only blocked-user list with unblock.
+- Social pgTAP coverage contains 47 transactional assertions for follow/reaction/comment/block/report/Crew invariants and the private privileged-RPC boundary. Foundation validation requires migrations `010` through `014`, ACL/RPC contracts, privacy/cursor invariants, Social performance hardening, mobile social surfaces, and the Social test file.
 - One mobile Supabase client with persistent AsyncStorage-backed sessions.
 - One root auth/session provider with foreground/background token refresh handling.
 - The plan-required email magic-link fallback is implemented with `proofmode://auth` deep-link session completion; the temporary password bootstrap is removed.
@@ -41,22 +52,13 @@
 - Root `next` is patched from `16.2.11` to `16.3.2`; the resulting lock resolves `postcss@8.5.23` and `sharp@0.35.3`, and both full and production-only root npm audits report zero vulnerabilities.
 - Next `16.3.2` passes ProofMode Web typecheck and production build with the existing `typescript@6.0.3` compatibility pin.
 - The mobile npm audit reports zero high/critical findings and 10 moderate findings in the Expo SDK-57 tooling graph. The concrete vulnerable chain is `expo@57.0.15 → @expo/config-plugins@57.0.8 → xcode@3.0.1 → uuid@7.0.3`; npm provides no safe SDK-57-compatible aggregate remediation, so no forced Expo rollback or unsupported uuid override is used.
-- Foundation validation covers migration contracts, media/runtime hardening, root package/lock parity, dependency security floors, TypeScript compatibility, and locked Web CI.
+- Foundation validation covers migration contracts, media/runtime hardening, Social Actions/security/performance contracts, root package/lock parity, dependency security floors, TypeScript compatibility, and locked Web CI.
 - CI covers foundation validation, local Supabase startup, database linting, transactional pgTAP tests, mobile locked install/typecheck, and web locked install/typecheck/build.
 - GitHub Issues are the durable control plane: `main` is released history, `dev` is integration, and work/bug branches are Issue-backed. Native protected branches are unavailable on the current private-repository plan, so local pre-push blocking plus server-side branch-policy audit provide the documented soft enforcement.
 
-### Implemented on Social Actions branch; verification pending
-- Issue #21 is active on `work/21-social-actions`, based directly on the released `dev` integration state.
-- Forward migrations `010` through `013` add the Social Actions contract without rewriting applied migrations: RPC-owned follows/reactions/comments/block/report mutations, block-aware reads and aggregate privacy, Crew room messages/read models, invite creation, feed viewer relationship state, caller-only blocked-user listing, and a private-schema boundary for newly introduced privileged implementations.
-- Public Social Actions RPC names remain stable, but their public functions are `SECURITY INVOKER` wrappers; the 13 privileged implementations live in the non-exposed `private` schema with explicit role grants.
-- Blocking atomically removes both directional follow edges; blocked pairs cannot newly follow/react/comment through the social RPCs, and blocked users are filtered from exposed feed/comment/profile/Crew reads and social aggregates.
-- Home is wired to real follow/unfollow, the five canonical reactions, text comments, own-comment deletion, post/comment/user reporting, and block behavior. Signed-out users may read public content/comments but are routed to authentication before persisted interaction.
-- Public Drop detail includes report submission through the same reason taxonomy.
-- Crews reuses `challenges`, `challenge_members`, proofs/posts, and invites as the room/membership/activity model instead of adding parallel Crew membership tables. One `crew_messages` table supplies the lightweight room thread.
-- Crews tab now loads signed-in Crew rooms; room detail includes members, proof-based leaderboard, recent activity, text thread, own-message deletion, and invite-code creation.
-- You includes a caller-only blocked-user list with unblock.
-- Social pgTAP coverage contains 47 transactional assertions for follow/reaction/comment/block/report/Crew invariants and the private privileged-RPC boundary. Foundation validation requires migrations `010` through `013`, ACL/RPC contracts, privacy/cursor invariants, mobile social surfaces, and the new test file.
-- These Social Actions changes are not yet considered verified or integrated until PR metadata plus Foundation, Database, Mobile, and Web CI pass on the final head, migrations `010` through `013` are verified on staging, and the branch is merged to `dev`.
+### Social Actions integration pending
+- Issue #21 remains in review on `work/21-social-actions`; the implementation is CI- and staging-verified but is not part of `dev` until PR #22 passes the final post-documentation CI/control head and merges.
+- Do not represent Social Actions as integrated or released until that merge is complete.
 
 ### Present but not fully external/device-verified
 - Hosted Supabase must allow `proofmode://auth` before physical-device magic-link testing; the local Supabase config already allows it.
@@ -83,7 +85,7 @@
 
 ## Execution order from here
 
-1. **Finish Social Actions verification/integration** — full CI/control pass, staging migration verification, then merge Issue #21 into `dev`.
+1. **Finish Social Actions integration** — final post-checkpoint CI/control pass, then merge Issue #21 into `dev`.
 2. **Journey/proof integration** — proof ledger, streak/reset/comeback behavior, Passport metrics/history.
 3. **Sharing and attribution** — exact-content links, hosted association files, native share, invite attribution.
 4. **Push and monetization** — notification preferences/contextual push first, then RevenueCat.
