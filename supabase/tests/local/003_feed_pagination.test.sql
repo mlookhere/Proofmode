@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(2);
+select plan(3);
 
 insert into auth.users (id, email, raw_user_meta_data)
 values ('10000000-0000-0000-0000-000000000021', 'proofmode-feed@example.test', '{"name":"Feed User"}'::jsonb);
@@ -11,7 +11,8 @@ insert into public.posts (
 ) values
   ('30000000-0000-0000-0000-000000000021', '10000000-0000-0000-0000-000000000021', 'proof', 'Newest public proof', 'public', 'published', 'approved', '2026-08-03T12:00:00Z'),
   ('30000000-0000-0000-0000-000000000022', '10000000-0000-0000-0000-000000000021', 'proof', 'Middle public proof', 'public', 'published', 'approved', '2026-08-02T12:00:00Z'),
-  ('30000000-0000-0000-0000-000000000023', '10000000-0000-0000-0000-000000000021', 'proof', 'Oldest public proof', 'public', 'published', 'approved', '2026-08-01T12:00:00Z');
+  ('30000000-0000-0000-0000-000000000023', '10000000-0000-0000-0000-000000000021', 'proof', 'Oldest public proof', 'public', 'published', 'approved', '2026-08-01T12:00:00Z'),
+  ('30000000-0000-0000-0000-000000000024', '10000000-0000-0000-0000-000000000021', 'proof', 'Future public proof', 'public', 'published', 'approved', now() + interval '1 day');
 
 set local role anon;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
@@ -25,6 +26,13 @@ select is(
    )),
   3,
   'anonymous feed RPC returns visible public posts'
+);
+
+select is(
+  (select count(*)::int from public.get_feed_v1(20, null, null, null)
+   where post_id = '30000000-0000-0000-0000-000000000024'),
+  0,
+  'future-dated published posts are excluded until publication time'
 );
 
 select is(

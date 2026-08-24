@@ -20,6 +20,7 @@ assert(JSON.stringify(migrations) === JSON.stringify([
   "006_staging_hardening.sql",
   "007_client_acl_parity.sql",
   "008_media_post_lifecycle.sql",
+  "009_feed_publication_time_guard.sql",
 ]), `Unexpected migration set: ${migrations.join(", ")}`);
 
 const templatesSql = await read("supabase/migrations/004_template_library.sql");
@@ -59,6 +60,12 @@ const paginationSql = await read("supabase/migrations/005_feed_pagination.sql");
 for (const cursorPart of ["cursor_score", "cursor_time", "cursor_post_id"]) assert(paginationSql.includes(cursorPart), `Feed pagination is missing ${cursorPart}`);
 assert(paginationSql.includes("order by r.score desc, r.published_at desc, r.post_id desc"), "Feed cursor does not match ordering");
 assert(!paginationSql.includes("now() - p.published_at"), "Feed cursor score must not drift between page requests");
+
+const publicationGuardSql = await read("supabase/migrations/009_feed_publication_time_guard.sql");
+assert(publicationGuardSql.includes("and p.published_at <= now()"), "Feed does not exclude future-dated published posts");
+assert(publicationGuardSql.includes("order by r.score desc, r.published_at desc, r.post_id desc"), "Publication guard changed feed ordering");
+for (const cursorPart of ["cursor_score", "cursor_time", "cursor_post_id"]) assert(publicationGuardSql.includes(cursorPart), `Publication guard is missing ${cursorPart}`);
+assert(!publicationGuardSql.includes("now() - p.published_at"), "Publication guard must preserve deterministic feed score");
 
 const mobilePackage = JSON.parse(await read("mobile/package.json"));
 const mobileLock = JSON.parse(await read("mobile/package-lock.json"));
