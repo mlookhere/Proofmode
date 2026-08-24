@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const { data: assets, error } = await admin
       .from("media_assets")
       .select("id, provider, storage_key, playback_id, processing_status")
-      .in("processing_status", ["pending", "uploading", "failed"])
+      .in("processing_status", ["pending", "uploading", "processing", "failed"])
       .lt("updated_at", cutoff)
       .order("updated_at", { ascending: true })
       .limit(50);
@@ -26,7 +26,8 @@ export async function GET(request: Request) {
         const { error: updateError } = await admin
           .from("media_assets")
           .update({ processing_status: "deleted" })
-          .eq("id", asset.id);
+          .eq("id", asset.id)
+          .in("processing_status", ["pending", "uploading", "processing", "failed"]);
         if (updateError) throw updateError;
         deleted += 1;
       } catch (error) {
