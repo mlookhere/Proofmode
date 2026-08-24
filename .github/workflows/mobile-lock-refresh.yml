@@ -1,0 +1,39 @@
+name: Refresh v0.9 mobile lockfile
+
+on:
+  push:
+    branches: [work/7-media-create-v0-9-0]
+    paths:
+      - mobile/package.json
+      - .github/workflows/mobile-lock-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.13.0
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Generate package lock
+        working-directory: mobile
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Commit package lock
+        shell: bash
+        run: |
+          if git diff --quiet -- mobile/package-lock.json; then
+            echo "Mobile lockfile already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile/package-lock.json
+          git commit -m "chore(mobile): refresh v0.9.0 lockfile"
+          git push origin HEAD:work/7-media-create-v0-9-0
