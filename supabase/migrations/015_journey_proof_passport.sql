@@ -12,22 +12,18 @@ create unique index if not exists journeys_attempt_token_idx
   on public.journeys(user_id, challenge_id, attempt_token)
   where attempt_token is not null;
 
-alter table public.proofs
-  alter column media_url drop not null;
+alter table public.proofs alter column media_url drop not null;
 alter table public.proofs
   add column if not exists post_id uuid references public.posts(id) on delete set null,
   add column if not exists journey_id uuid references public.journeys(id) on delete set null,
   add column if not exists media_asset_id uuid references public.media_assets(id) on delete set null;
 
 create unique index if not exists proofs_post_unique_idx
-  on public.proofs(post_id)
-  where post_id is not null;
+  on public.proofs(post_id) where post_id is not null;
 create index if not exists proofs_journey_date_idx
-  on public.proofs(journey_id, proof_date, id)
-  where journey_id is not null;
+  on public.proofs(journey_id, proof_date, id) where journey_id is not null;
 create index if not exists proofs_media_asset_idx
-  on public.proofs(media_asset_id)
-  where media_asset_id is not null;
+  on public.proofs(media_asset_id) where media_asset_id is not null;
 
 create table if not exists public.journey_follows (
   journey_id uuid not null references public.journeys(id) on delete cascade,
@@ -61,9 +57,12 @@ using (private.can_view_journey_v1(id));
 
 drop policy if exists "journey follows caller read" on public.journey_follows;
 create policy "journey follows caller read" on public.journey_follows for select
-using (follower_id = (select auth.uid()) and private.can_view_journey_v1(journey_id));
+using (
+  follower_id = (select auth.uid())
+  and private.can_view_journey_v1(journey_id)
+);
 
--- Client writes are RPC-owned. Legacy web proof submission remains available through a narrow RPC below.
+-- Journey/proof credibility mutations are RPC-owned.
 revoke insert, update, delete on table public.journeys from anon, authenticated;
 revoke insert, update, delete on table public.journey_follows from anon, authenticated;
 revoke insert, update, delete on table public.proofs from anon, authenticated;
@@ -78,14 +77,15 @@ language sql stable security definer set search_path = '' as $$
     from public.proofs p
     where p.journey_id = target_journey
       and exists (
-        select 1 from public.verifications v
+        select 1
+        from public.verifications v
         where v.proof_id = p.id and v.verdict = true
       )
   ),
   numbered as (
     select
       proof_date,
-      proof_date - row_number() over (order by proof_date)::int as run_key
+      proof_date - (row_number() over (order by proof_date))::int as run_key
     from verified_dates
   ),
   runs as (
@@ -274,14 +274,13 @@ begin
   if actor_id is null then raise exception 'authentication required'; end if;
   if clean_media is null then raise exception 'media required'; end if;
   if target_proof_type not in ('photo', 'video', 'link', 'screenshot') then raise exception 'invalid proof type'; end if;
-  journey_id := private.ensure_journey_v1(target_challenge);
 
+  journey_id := private.ensure_journey_v1(target_challenge);
   insert into public.proofs (
     challenge_id, user_id, proof_type, media_url, caption, proof_date, journey_id
   ) values (
     target_challenge, actor_id, target_proof_type, clean_media, clean_caption, current_date, journey_id
   ) returning id into proof_id;
-
   return proof_id;
 end;
 $$;
@@ -337,7 +336,6 @@ begin
     set proof_id = receipt_id
     where p.id = new.id and p.proof_id is null;
   end if;
-
   return new;
 end;
 $$;
@@ -395,8 +393,7 @@ begin
 
   with journey as (
     select j.*, c.slug as challenge_slug, c.title as challenge_title,
-           c.duration_days, c.visibility as challenge_visibility,
-           pr.handle, pr.display_name, pr.avatar_url
+           c.duration_days, pr.handle, pr.display_name, pr.avatar_url
     from public.journeys j
     join public.challenges c on c.id = j.challenge_id
     left join public.profiles pr on pr.id = j.user_id
@@ -420,7 +417,8 @@ begin
         where v.proof_id = p.proof_id and v.verdict = true
       ) as proof_verified,
       (
-        select v.verdict from public.verifications v
+        select v.verdict
+        from public.verifications v
         where v.proof_id = p.proof_id and v.verifier_id = auth.uid()
         limit 1
       ) as viewer_verdict,
@@ -461,7 +459,10 @@ begin
     ),
     'viewer_is_owner', j.user_id = auth.uid(),
     'viewer_is_member', auth.uid() is not null and private.is_challenge_member(j.challenge_id),
-    'timeline', coalesce((select jsonb_agg(to_jsonb(t) order by t.published_at asc, t.post_id asc) from timeline t), '[]'::jsonb)
+    'timeline', coalesce((
+      select jsonb_agg(to_jsonb(t) order by t.published_at asc, t.post_id asc)
+      from timeline t
+    ), '[]'::jsonb)
   ) into result
   from journey j cross join metrics m;
 
@@ -510,7 +511,10 @@ begin
   ),
   visible_proofs as (
     select pr.id,
-           exists (select 1 from public.verifications v where v.proof_id = pr.id and v.verdict = true) as verified
+           exists (
+             select 1 from public.verifications v
+             where v.proof_id = pr.id and v.verdict = true
+           ) as verified
     from public.proofs pr
     join target t on t.id = pr.user_id
     join public.challenges c on c.id = pr.challenge_id
@@ -580,20 +584,32 @@ begin
       + (select n from recruits) * 5
     ),
     'completed_drops', (select n from completed),
-    'current_streak', coalesce((select max(vj.current_streak)::int from visible_journeys vj where vj.status = 'active'), 0),
+    'current_streak', coalesce((
+      select max(vj.current_streak)::int from visible_journeys vj where vj.status = 'active'
+    ), 0),
     'best_streak', coalesce((select max(vj.best_streak)::int from visible_journeys vj), 0),
     'comeback_count', (select n from comeback),
-    'active_journeys', coalesce((select jsonb_agg(to_jsonb(jl) order by jl.started_at desc) from journey_list jl where jl.status in ('active','completed')), '[]'::jsonb),
-    'journeys', coalesce((select jsonb_agg(to_jsonb(jl) order by jl.started_at desc) from journey_list jl), '[]'::jsonb),
-    'trophy_case', coalesce((select jsonb_agg(to_jsonb(jl) order by jl.started_at desc) from journey_list jl where jl.status = 'completed'), '[]'::jsonb),
-    'recent_posts', coalesce((select jsonb_agg(to_jsonb(rp) order by rp.published_at desc) from recent_posts rp), '[]'::jsonb)
+    'active_journeys', coalesce((
+      select jsonb_agg(to_jsonb(jl) order by jl.started_at desc)
+      from journey_list jl where jl.status = 'active'
+    ), '[]'::jsonb),
+    'journeys', coalesce((
+      select jsonb_agg(to_jsonb(jl) order by jl.started_at desc) from journey_list jl
+    ), '[]'::jsonb),
+    'trophy_case', coalesce((
+      select jsonb_agg(to_jsonb(jl) order by jl.started_at desc)
+      from journey_list jl where jl.status = 'completed'
+    ), '[]'::jsonb),
+    'recent_posts', coalesce((
+      select jsonb_agg(to_jsonb(rp) order by rp.published_at desc) from recent_posts rp
+    ), '[]'::jsonb)
   ) else null end into result;
 
   return result;
 end;
 $$;
 
--- Preserve old Journey timeline RPC as an invoker wrapper over its moved private implementation.
+-- Preserve the exact legacy Journey-post read contract while moving its privileged body private.
 alter function public.get_journey_posts(uuid) set schema private;
 revoke all on function private.get_journey_posts(uuid) from public, anon, authenticated;
 grant execute on function private.get_journey_posts(uuid) to anon, authenticated;
@@ -603,20 +619,15 @@ returns table (
   kind text,
   caption text,
   published_at timestamptz,
+  proof_id uuid,
   media_kind text,
   media_public_url text,
-  media_playback_id text,
-  user_id uuid,
-  handle text,
-  display_name text,
-  challenge_id uuid,
-  challenge_slug text,
-  challenge_title text
+  media_playback_id text
 ) language sql stable security invoker set search_path = '' as $$
   select * from private.get_journey_posts(target_journey);
 $$;
 
--- Replace the old public SECURITY DEFINER profile snapshot with an invoker wrapper.
+-- Replace the old public profile definer with a narrow invoker wrapper.
 drop function public.get_profile_snapshot(text);
 create function public.get_profile_snapshot(target_handle text)
 returns jsonb language sql stable security invoker set search_path = '' as $$
@@ -657,7 +668,7 @@ returns jsonb language sql stable security invoker set search_path = '' as $$
   select private.get_my_journey_for_drop_v1(target_challenge);
 $$;
 
--- Private implementations: explicit least privilege for wrappers only.
+-- Explicit least privilege for private implementations.
 revoke all on function private.ensure_journey_v1(uuid) from public, anon, authenticated;
 revoke all on function private.reset_journey_v1(uuid, text) from public, anon, authenticated;
 revoke all on function private.set_journey_follow_v1(uuid, boolean) from public, anon, authenticated;
