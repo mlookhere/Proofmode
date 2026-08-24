@@ -29,13 +29,18 @@ export async function POST(request: Request) {
 
     const { data: initialPost, error: initialPostError } = await admin
       .from("posts")
-      .select("id, user_id, challenge_id")
+      .select("id, user_id, challenge_id, status, moderation_status")
       .eq("media_asset_id", mediaId)
       .maybeSingle();
     if (initialPostError) throw initialPostError;
     if (!initialPost || initialPost.user_id !== user.id || !initialPost.challenge_id) {
       throw new MediaApiError(409, "Upload has no valid Drop post");
     }
+    if (initialPost.status === "published" && asset.processing_status === "ready") {
+      return Response.json({ postId: initialPost.id, status: initialPost.status, moderationStatus: initialPost.moderation_status });
+    }
+    if (initialPost.status === "removed") throw new MediaApiError(409, "Post was removed");
+
     await assertPublicChallengeMembership(admin, user.id, initialPost.challenge_id);
 
     if (asset.provider === "r2") {
@@ -47,7 +52,7 @@ export async function POST(request: Request) {
         const mimeType = remote.mimeType?.toLowerCase() || asset.mime_type?.toLowerCase() || "";
         if (!IMAGE_MIME_TYPES.has(mimeType)) throw new MediaApiError(415, "Uploaded image type is not allowed");
 
-        const { error: updateError } = await admin
+        const { data: updated, error: updateError } = await admin
           .from("media_assets")
           .update({
             bytes: remote.bytes,
@@ -56,8 +61,12 @@ export async function POST(request: Request) {
             processing_status: "ready",
           })
           .eq("id", mediaId)
-          .eq("owner_id", user.id);
+          .eq("owner_id", user.id)
+          .neq("processing_status", "deleted")
+          .select("id")
+          .maybeSingle();
         if (updateError) throw updateError;
+        if (!updated) throw new MediaApiError(409, "Upload state changed; try again");
       }
     } else if (asset.provider === "stream") {
       if (asset.processing_status === "uploading") {
@@ -65,7 +74,8 @@ export async function POST(request: Request) {
           .from("media_assets")
           .update({ processing_status: "processing" })
           .eq("id", mediaId)
-          .eq("owner_id", user.id);
+          .eq("owner_id", user.id)
+          .eq("processing_status", "uploading");
         if (updateError) throw updateError;
       }
     } else {
