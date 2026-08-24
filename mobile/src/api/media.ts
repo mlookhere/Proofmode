@@ -46,8 +46,9 @@ type UploadIntent = Readonly<{
   mediaId: string;
   postId: string;
   provider: "r2" | "stream";
-  uploadUrl: string;
-  method: "PUT" | "POST";
+  alreadyUploaded?: boolean;
+  uploadUrl?: string;
+  method?: "PUT" | "POST";
   headers?: Record<string, string>;
 }>;
 
@@ -154,9 +155,7 @@ export async function loadPendingUpload(): Promise<PendingUpload | null> {
     try {
       const parsed = JSON.parse(legacy) as { media?: { uri?: string } };
       if (parsed.media?.uri) await removePersistedMedia(parsed.media.uri);
-    } catch {
-      // Invalid unreleased v1 state can be discarded safely.
-    }
+    } catch {}
     await AsyncStorage.removeItem(LEGACY_PENDING_UPLOAD_KEY);
   }
 
@@ -188,6 +187,12 @@ export async function uploadToProvider(
   intent: UploadIntent,
   onProgress: (progress: number) => void,
 ) {
+  if (intent.alreadyUploaded) {
+    onProgress(1);
+    return;
+  }
+  if (!intent.uploadUrl || !intent.method) throw new Error("Upload intent is incomplete.");
+
   const task = FileSystem.createUploadTask(
     intent.uploadUrl,
     media.uri,
