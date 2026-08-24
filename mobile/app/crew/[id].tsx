@@ -10,6 +10,7 @@ import {
 } from "@/api/social";
 import { useAuth } from "@/auth/session";
 import { Eyebrow, PrimaryButton, Screen, Surface } from "@/components/ui";
+import { shareCanonical } from "@/sharing";
 import { colors, radius, spacing } from "@/theme";
 
 function shortDate(value: string | null) {
@@ -45,9 +46,7 @@ export default function CrewRoomScreen() {
     if (!isSessionLoading && !session) router.replace("/auth");
   }, [isSessionLoading, router, session]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   async function sendMessage() {
     const body = message.trim();
@@ -60,9 +59,7 @@ export default function CrewRoomScreen() {
       setRoom(await fetchCrewRoom(room.id));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not post message.");
-    } finally {
-      setIsMutating(false);
-    }
+    } finally { setIsMutating(false); }
   }
 
   async function removeMessage(messageId: string) {
@@ -73,9 +70,7 @@ export default function CrewRoomScreen() {
       if (await deleteCrewMessage(messageId)) setRoom(await fetchCrewRoom(room.id));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not delete message.");
-    } finally {
-      setIsMutating(false);
-    }
+    } finally { setIsMutating(false); }
   }
 
   async function makeInvite() {
@@ -83,30 +78,22 @@ export default function CrewRoomScreen() {
     setIsMutating(true);
     setError(null);
     try {
-      setInviteCode(await createCrewInvite(room.id));
+      const code = await createCrewInvite(room.id);
+      setInviteCode(code);
+      await shareCanonical({
+        title: room.title,
+        text: `Join my Crew for ${room.title}. Receipts required.`,
+        path: `/invite/${code}`,
+        source: "crew_invite_share",
+      });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not create invite.");
-    } finally {
-      setIsMutating(false);
-    }
+      setError(cause instanceof Error ? cause.message : "Could not create or share invite.");
+    } finally { setIsMutating(false); }
   }
 
-  if (isSessionLoading || isLoading) {
-    return <Screen contentStyle={styles.centered}><ActivityIndicator color={colors.hot} /></Screen>;
-  }
-
+  if (isSessionLoading || isLoading) return <Screen contentStyle={styles.centered}><ActivityIndicator color={colors.hot} /></Screen>;
   if (!session) return <Screen />;
-
-  if (!room) {
-    return (
-      <Screen contentStyle={styles.centered}>
-        <Eyebrow>CREW UNAVAILABLE</Eyebrow>
-        <Text style={styles.title}>THIS ROOM ISN’T AVAILABLE.</Text>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <PrimaryButton onPress={() => router.replace("/(tabs)/crews")}>BACK TO CREWS</PrimaryButton>
-      </Screen>
-    );
-  }
+  if (!room) return <Screen contentStyle={styles.centered}><Eyebrow>CREW UNAVAILABLE</Eyebrow><Text style={styles.title}>THIS ROOM ISN’T AVAILABLE.</Text>{error ? <Text style={styles.error}>{error}</Text> : null}<PrimaryButton onPress={() => router.replace("/(tabs)/crews")}>BACK TO CREWS</PrimaryButton></Screen>;
 
   return (
     <Screen>
@@ -119,74 +106,33 @@ export default function CrewRoomScreen() {
       <Text style={styles.section}>LEADERBOARD</Text>
       <Surface style={styles.panel}>
         {room.leaderboard.length === 0 ? <Text style={styles.empty}>No proof activity yet.</Text> : null}
-        {room.leaderboard.map((member) => (
-          <View key={member.user_id} style={styles.row}>
-            <Text style={styles.rank}>#{member.rank}</Text>
-            <View style={styles.rowCopy}>
-              <Text style={styles.rowTitle}>{member.display_name}</Text>
-              <Text style={styles.rowMeta}>{member.handle ? `@${member.handle} · ` : ""}{member.receipts} RECEIPTS</Text>
-            </View>
-            <Text style={styles.score}>{member.proof_score}</Text>
-          </View>
-        ))}
+        {room.leaderboard.map((member) => <View key={member.user_id} style={styles.row}><Text style={styles.rank}>#{member.rank}</Text><View style={styles.rowCopy}><Text style={styles.rowTitle}>{member.display_name}</Text><Text style={styles.rowMeta}>{member.handle ? `@${member.handle} · ` : ""}{member.receipts} RECEIPTS</Text></View><Text style={styles.score}>{member.proof_score}</Text></View>)}
       </Surface>
 
       <Text style={styles.section}>MEMBERS</Text>
       <Surface style={styles.panel}>
-        {room.members.map((member) => (
-          <View key={member.user_id} style={styles.row}>
-            <View style={styles.rowCopy}>
-              <Text style={styles.rowTitle}>{member.display_name}</Text>
-              <Text style={styles.rowMeta}>{member.handle ? `@${member.handle} · ` : ""}{member.role.toUpperCase()}{member.founder ? " · FOUNDER" : ""}</Text>
-            </View>
-          </View>
-        ))}
+        {room.members.map((member) => <View key={member.user_id} style={styles.row}><View style={styles.rowCopy}><Text style={styles.rowTitle}>{member.display_name}</Text><Text style={styles.rowMeta}>{member.handle ? `@${member.handle} · ` : ""}{member.role.toUpperCase()}{member.founder ? " · FOUNDER" : ""}</Text></View></View>)}
       </Surface>
 
       <Text style={styles.section}>RECENT ACTIVITY</Text>
       <Surface style={styles.panel}>
         {room.recent_activity.length === 0 ? <Text style={styles.empty}>No recent Crew posts yet.</Text> : null}
-        {room.recent_activity.map((activity) => (
-          <View key={activity.post_id} style={styles.activity}>
-            <Text style={styles.rowMeta}>{activity.display_name} · {activity.kind.toUpperCase()} · {shortDate(activity.published_at)}</Text>
-            <Text style={styles.activityText}>{activity.caption?.trim() || "Proof posted."}</Text>
-          </View>
-        ))}
+        {room.recent_activity.map((activity) => <View key={activity.post_id} style={styles.activity}><Text style={styles.rowMeta}>{activity.display_name} · {activity.kind.toUpperCase()} · {shortDate(activity.published_at)}</Text><Text style={styles.activityText}>{activity.caption?.trim() || "Proof posted."}</Text></View>)}
       </Surface>
 
       <Text style={styles.section}>ROOM THREAD</Text>
       <Surface style={styles.panel}>
         {room.messages.length === 0 ? <Text style={styles.empty}>Start the Crew check-in.</Text> : null}
-        {room.messages.map((item) => (
-          <View key={item.message_id} style={styles.message}>
-            <View style={styles.messageHead}>
-              <Text style={styles.rowMeta}>{item.display_name}{item.handle ? ` · @${item.handle}` : ""} · {shortDate(item.created_at)}</Text>
-              {item.is_own ? (
-                <Pressable accessibilityRole="button" onPress={() => void removeMessage(item.message_id)}><Text style={styles.delete}>DELETE</Text></Pressable>
-              ) : null}
-            </View>
-            <Text style={styles.activityText}>{item.body}</Text>
-          </View>
-        ))}
+        {room.messages.map((item) => <View key={item.message_id} style={styles.message}><View style={styles.messageHead}><Text style={styles.rowMeta}>{item.display_name}{item.handle ? ` · @${item.handle}` : ""} · {shortDate(item.created_at)}</Text>{item.is_own ? <Pressable accessibilityRole="button" onPress={() => void removeMessage(item.message_id)}><Text style={styles.delete}>DELETE</Text></Pressable> : null}</View><Text style={styles.activityText}>{item.body}</Text></View>)}
       </Surface>
 
       <View style={styles.composer}>
-        <TextInput
-          maxLength={500}
-          multiline
-          onChangeText={setMessage}
-          placeholder="Crew check-in"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={message}
-        />
-        <Pressable accessibilityRole="button" disabled={!message.trim() || isMutating} onPress={() => void sendMessage()} style={styles.send}>
-          <Text style={styles.sendText}>POST</Text>
-        </Pressable>
+        <TextInput maxLength={500} multiline onChangeText={setMessage} placeholder="Crew check-in" placeholderTextColor={colors.muted} style={styles.input} value={message} />
+        <Pressable accessibilityRole="button" disabled={!message.trim() || isMutating} onPress={() => void sendMessage()} style={styles.send}><Text style={styles.sendText}>POST</Text></Pressable>
       </View>
 
       <Text style={styles.section}>INVITE</Text>
-      <PrimaryButton onPress={isMutating ? undefined : () => void makeInvite()}>CREATE INVITE CODE</PrimaryButton>
+      <PrimaryButton onPress={isMutating ? undefined : () => void makeInvite()}>{isMutating ? "BUILDING INVITE…" : "CREATE + SHARE INVITE"}</PrimaryButton>
       {inviteCode ? <Text selectable style={styles.invite}>INVITE CODE · {inviteCode}</Text> : null}
 
       {isMutating ? <ActivityIndicator color={colors.hot} /> : null}
