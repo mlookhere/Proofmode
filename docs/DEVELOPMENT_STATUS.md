@@ -47,15 +47,16 @@
 
 ### Implemented on Social Actions branch; verification pending
 - Issue #21 is active on `work/21-social-actions`, based directly on the released `dev` integration state.
-- Forward migrations `010` and `011` add the Social Actions contract without rewriting applied migrations: RPC-owned follows/reactions/comments/block/report mutations, block-aware reads, Crew room messages, Crew read models, invite creation, feed viewer relationship state, and caller-only blocked-user listing for unblock.
-- Blocking atomically removes both directional follow edges; blocked pairs cannot newly follow/react/comment through the social RPCs, and blocked authors are filtered from exposed feed/comment/profile/Crew reads.
+- Forward migrations `010` through `013` add the Social Actions contract without rewriting applied migrations: RPC-owned follows/reactions/comments/block/report mutations, block-aware reads and aggregate privacy, Crew room messages/read models, invite creation, feed viewer relationship state, caller-only blocked-user listing, and a private-schema boundary for newly introduced privileged implementations.
+- Public Social Actions RPC names remain stable, but their public functions are `SECURITY INVOKER` wrappers; the 13 privileged implementations live in the non-exposed `private` schema with explicit role grants.
+- Blocking atomically removes both directional follow edges; blocked pairs cannot newly follow/react/comment through the social RPCs, and blocked users are filtered from exposed feed/comment/profile/Crew reads and social aggregates.
 - Home is wired to real follow/unfollow, the five canonical reactions, text comments, own-comment deletion, post/comment/user reporting, and block behavior. Signed-out users may read public content/comments but are routed to authentication before persisted interaction.
 - Public Drop detail includes report submission through the same reason taxonomy.
 - Crews reuses `challenges`, `challenge_members`, proofs/posts, and invites as the room/membership/activity model instead of adding parallel Crew membership tables. One `crew_messages` table supplies the lightweight room thread.
 - Crews tab now loads signed-in Crew rooms; room detail includes members, proof-based leaderboard, recent activity, text thread, own-message deletion, and invite-code creation.
 - You includes a caller-only blocked-user list with unblock.
-- Social pgTAP coverage contains 45 transactional assertions for follow/reaction/comment/block/report/Crew invariants. Foundation validation now requires the social migrations, ACL/RPC contracts, mobile social surfaces, and the new test file.
-- These Social Actions changes are not yet considered verified or integrated until PR metadata plus Foundation, Database, Mobile, and Web CI pass and the branch is merged to `dev`.
+- Social pgTAP coverage contains 47 transactional assertions for follow/reaction/comment/block/report/Crew invariants and the private privileged-RPC boundary. Foundation validation requires migrations `010` through `013`, ACL/RPC contracts, privacy/cursor invariants, mobile social surfaces, and the new test file.
+- These Social Actions changes are not yet considered verified or integrated until PR metadata plus Foundation, Database, Mobile, and Web CI pass on the final head, migrations `010` through `013` are verified on staging, and the branch is merged to `dev`.
 
 ### Present but not fully external/device-verified
 - Hosted Supabase must allow `proofmode://auth` before physical-device magic-link testing; the local Supabase config already allows it.
@@ -95,7 +96,7 @@ Auth provider/device configuration and Media/Create provider/device validation r
 - One Supabase client and one session provider. No custom auth framework.
 - Domain-specific query functions only; no repository/data-access abstraction until real duplication exists.
 - Keep authorization in RLS/RPC/server boundaries instead of duplicating it in clients.
-- Keep internal `SECURITY DEFINER` helpers outside exposed schemas.
+- Keep internal `SECURITY DEFINER` helpers outside exposed schemas; expose only narrow invoker RPC wrappers when privileged implementation is necessary.
 - Reuse challenge membership/invites as the Crew container; do not add duplicate Crew membership infrastructure.
 - Social mutations with cross-table invariants stay RPC-owned; clients do not write those tables directly.
 - Media provider credentials and publication state stay server-owned.
