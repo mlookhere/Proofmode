@@ -2,6 +2,25 @@
 
 All notable ProofMode development checkpoints are recorded here.
 
+## [0.9.0] - 2026-08-23
+
+### Added
+- Mobile proof composer with camera/library media selection, joined-Drop targeting, native upload progress, and interrupted-upload retry/discard.
+- Direct Cloudflare R2 image uploads through short-lived signed PUT URLs.
+- Direct Cloudflare Stream video uploads with signed webhook processing.
+- Database-owned media/post lifecycle and moderation outbox enqueueing.
+- Daily abandoned-upload cleanup protected by `CRON_SECRET`.
+- Published image and video rendering in Home with off-screen video pause.
+- Migration `008_media_post_lifecycle.sql` and transactional pgTAP lifecycle coverage.
+
+### Changed
+- Mobile version advanced to `0.9.0`.
+- Posting remains public-only in this slice and requires membership in a public Drop.
+- Media provider credentials and publication state remain server-owned.
+
+### External gates
+- Cloudflare R2/Stream credentials, Stream webhook registration, media delivery base URL, `CRON_SECRET`, moderation processing, and physical-device media tests remain deployment/release validation gates.
+
 ## [0.8.0] - 2026-08-23
 
 ### Added
