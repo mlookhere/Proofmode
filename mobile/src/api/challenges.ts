@@ -148,7 +148,6 @@ export async function setChallengeWatched(challengeId: string, userId: string, w
     .from("watched_challenges")
     .delete()
     .eq("user_id", userId)
-    .eq("challenge_id", challengeId)
-    .eq("user_id", userId);
+    .eq("challenge_id", challengeId);
   if (error) throw error;
 }
