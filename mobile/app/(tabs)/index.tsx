@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewToken } from "react-native";
 import type { FeedPost } from "@/domain";
 import { posts as previewPosts } from "@/data";
 import { fetchFeedPage, type FeedCursor } from "@/api/feed";
@@ -26,7 +26,13 @@ export default function Home() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState(false);
+  const [activePostId, setActivePostId] = useState<string | null>(null);
   const loadingMoreRef = useRef(false);
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 70 }).current;
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<FeedPost>[] }) => {
+    const next = viewableItems.find((token) => token.isViewable)?.item?.id ?? null;
+    setActivePostId(next);
+  }).current;
 
   const load = useCallback(async (refresh = false) => {
     if (!isSupabaseConfigured || (refresh && loadingMoreRef.current)) return;
@@ -101,6 +107,8 @@ export default function Home() {
           onRefresh={isSupabaseConfigured ? () => void load(true) : undefined}
           onEndReached={isSupabaseConfigured ? () => void loadMore() : undefined}
           onEndReachedThreshold={0.5}
+          viewabilityConfig={viewabilityConfig}
+          onViewableItemsChanged={onViewableItemsChanged}
           showsVerticalScrollIndicator={false}
           ListFooterComponent={
             isLoadingMore ? (
@@ -111,7 +119,7 @@ export default function Home() {
               </Pressable>
             ) : null
           }
-          renderItem={({ item }) => <FeedCard item={item} height={cardHeight} />}
+          renderItem={({ item }) => <FeedCard item={item} height={cardHeight} active={activePostId === item.id} />}
         />
       )}
     </Screen>
