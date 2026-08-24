@@ -30,6 +30,7 @@ assert(JSON.stringify(migrations) === JSON.stringify([
   "013_social_rpc_boundary.sql",
   "014_social_performance_hardening.sql",
   "015_journey_proof_passport.sql",
+  "016_cross_layer_integration_hardening.sql",
 ]), `Unexpected migration set: ${migrations.join(", ")}`);
 
 const templatesSql = await read("supabase/migrations/004_template_library.sql");
@@ -215,6 +216,26 @@ for (const changedField of ["user_id uuid", "handle text", "challenge_id uuid"])
   assert(!legacyJourneyWrapper.includes(changedField), `Legacy Journey wrapper unexpectedly changed shape: ${changedField}`);
 }
 
+const integrationSql = await read("supabase/migrations/016_cross_layer_integration_hardening.sql");
+requireAll(integrationSql, [
+  "revoke insert, update, delete on table public.posts from anon, authenticated",
+  'drop policy if exists "users create own posts" on public.posts',
+  'drop policy if exists "users update own unpublished posts" on public.posts',
+  'drop policy if exists "users delete own posts" on public.posts',
+  "private.assign_post_journey_v1",
+  "assigned_journey_id := private.reset_journey_v1",
+  "assigned_journey_id := private.ensure_journey_v1",
+  "set journey_id = assigned_journey_id",
+  "alter function public.get_challenge_landing(text, text) set schema private",
+  "alter function public.get_feed_v1(integer, numeric, timestamptz, uuid) set schema private",
+  "alter function public.get_public_challenge_snapshot(text) set schema private",
+  "alter function public.join_challenge_v2(text, text) set schema private",
+  "owner_plan in ('creator', 'black')",
+  "security invoker",
+  "select private.join_challenge_v2",
+  "select * from private.get_feed_v1",
+], "Cross-layer hardening migration");
+
 const mobilePackage = JSON.parse(await read("mobile/package.json"));
 const mobileLock = JSON.parse(await read("mobile/package-lock.json"));
 const mobileAppConfig = JSON.parse(await read("mobile/app.json")).expo;
@@ -297,10 +318,10 @@ requireAll(mobileExplore, ["fetchPublicChallenges", "/challenge/"], "Mobile Expl
 requireAll(mobileChallengeRoute, ['runAction("join")', 'runAction("watch")', "ReportModal", "REPORT DROP", "fetchMyJourneyForDrop", "ensureJourney", "CONTINUE JOURNEY", "START JOURNEY"], "Challenge route");
 
 const mobileCreate = await read("mobile/app/(tabs)/create.tsx");
-requireAll(mobileCreate, ["launchCameraAsync", "launchImageLibraryAsync", "MAX_VIDEO_SECONDS", "loadPendingUpload", "retryPendingUpload", "createResetToken", "resetToken", "POST {mode.toUpperCase()}"], "Mobile Create");
+requireAll(mobileCreate, ["launchCameraAsync", "launchImageLibraryAsync", "MAX_VIDEO_SECONDS", "loadPendingUpload", "retryPendingUpload", "createResetToken", "resetToken", "discardUploadIntent", "POST {mode.toUpperCase()}"], "Mobile Create");
 assert(mobileCreate.includes("const userId = session?.user.id") && mobileCreate.includes("setChallengeId(joined[0]?.id || \"\")"), "Composer state is not reset safely across account changes");
 const mobileMedia = await read("mobile/src/api/media.ts");
-requireAll(mobileMedia, ["createUploadTask", "BINARY_CONTENT", "MULTIPART", "proofmode.pending-media-upload.v3", "LEGACY_PENDING_UPLOAD_V2_PREFIX", "resetToken", "/api/media/upload-intent", "/api/media/finalize"], "Mobile media client");
+requireAll(mobileMedia, ["createUploadTask", "BINARY_CONTENT", "MULTIPART", "proofmode.pending-media-upload.v3", "LEGACY_PENDING_UPLOAD_V2_PREFIX", "resetToken", "discardUploadIntent", "/api/media/upload-intent", "/api/media/finalize"], "Mobile media client");
 assert(mobileMedia.includes("pendingUploadKey(userId)") && mobileMedia.includes("pending.userId !== currentUserId"), "Interrupted upload state is not account scoped");
 assert(!/SUPABASE_SERVICE_ROLE_KEY|CLOUDFLARE_[A-Z_]+/.test(mobileMedia), "Server media credentials leaked into mobile code");
 
@@ -315,7 +336,8 @@ const mediaServer = await read("lib/media/server.ts");
 requireAll(mediaServer, ["requireBearerUser", "bearerClient", "SUPABASE_SERVICE_ROLE_KEY", "getSignedUrl", "timingSafeEqual", "MAX_VIDEO_BYTES", "MAX_VIDEO_SECONDS"], "Media backend");
 assert(mediaServer.includes("challenges!inner(visibility,format)") && mediaServer.includes('challenge?.format !== "drop"'), "Media authorization does not require a public Drop");
 const uploadIntent = await read("app/api/media/upload-intent/route.ts");
-requireAll(uploadIntent, ["assertPublicChallengeMembership", "assertUploadRate", "RECOVERABLE_MEDIA_STATES", "Upload is no longer in a retryable state", "playback_id: direct.uid", "playback_id: previousUid", "bearerClient", 'rpc("ensure_journey_v1"', 'rpc("reset_journey_v1"', "journey_id: journeyId", "resetToken", "post.journey_id"], "Upload intent");
+requireAll(uploadIntent, ["assertPublicChallengeMembership", "assertUploadRate", "RECOVERABLE_MEDIA_STATES", "Upload is no longer in a retryable state", "playback_id: direct.uid", "playback_id: previousUid", "bearerClient", 'rpc("assign_post_journey_v1"', "journey_id: null", "assignPostJourney", "resetToken", "post.journey_id"], "Upload intent");
+assert(!uploadIntent.includes('rpc("ensure_journey_v1"') && !uploadIntent.includes('rpc("reset_journey_v1"'), "Upload intent can mutate Journey state before its post exists");
 const finalize = await read("app/api/media/finalize/route.ts");
 assert(finalize.includes("assertPublicChallengeMembership") && finalize.includes("initialPost.challenge_id"), "Finalize does not reauthorize current Drop membership");
 assert(finalize.includes('asset.processing_status === "deleted"'), "Finalize can revive discarded media");
@@ -329,8 +351,10 @@ const legacyProofRoute = await read("app/api/proofs/route.ts");
 requireAll(legacyProofRoute, ['rpc("create_legacy_proof_v1"', "target_media_url", "proofId"], "Legacy proof route");
 assert(!legacyProofRoute.includes('.from("proofs").insert'), "Legacy proof route can still bypass proof RPC");
 const verificationRoute = await read("app/api/verifications/route.ts");
-requireAll(verificationRoute, ['rpc("set_proof_verification_v1"', "target_proof", "target_verdict"], "Verification route");
+requireAll(verificationRoute, ['rpc("set_proof_verification_v1"', "target_proof", "target_verdict", 'typeof body.verdict !== "boolean"'], "Verification route");
 assert(!verificationRoute.includes('.from("verifications").upsert'), "Verification route can still bypass verification RPC");
+const challengeRoute = await read("app/api/challenges/route.ts");
+assert(challengeRoute.includes('plan === "creator" || plan === "black" ? 100000'), "Web challenge capacity does not treat Black as Creator+");
 
 const vercel = JSON.parse(await read("vercel.json"));
 assert(vercel.crons?.some((cron) => cron.path === "/api/media/cleanup"), "Vercel media cleanup cron is missing");
@@ -351,6 +375,7 @@ for (const testFile of [
   "supabase/tests/database/004_media_lifecycle.test.sql",
   "supabase/tests/database/005_social_actions.test.sql",
   "supabase/tests/database/006_journey_proof_passport.test.sql",
+  "supabase/tests/database/007_cross_layer_integration_hardening.test.sql",
   "supabase/tests/local/003_feed_pagination.test.sql",
 ]) {
   const sql = await read(testFile);
@@ -362,6 +387,8 @@ for (const testFile of [
 
 const journeyTest = await read("supabase/tests/database/006_journey_proof_passport.test.sql");
 requireAll(journeyTest, ["select plan(50)", "only one active Journey exists", "Reset retry cannot manufacture attempts", "Fail never becomes a proof receipt", "Almost never becomes a proof receipt", "Reset never becomes a proof receipt", "broken streak preserves best historical run", "challenge membership required", "paid/status plan cannot change Proof Score", "blocking severs Journey follows"], "Journey pgTAP");
+const integrationTest = await read("supabase/tests/database/007_cross_layer_integration_hardening.test.sql");
+requireAll(integrationTest, ["select plan(25)", "direct post insert is denied", "forced post-link failure aborts Reset assignment", "failed post link rolls back the new Reset attempt", "Black-owned Drop accepts member six", "anonymous public read RPC access is preserved"], "Integration hardening pgTAP");
 
 const ci = await read(".github/workflows/ci.yml");
 requireAll(ci, ["supabase/setup-cli@v2", "supabase start", "supabase db lint --level error --fail-on error", "supabase test db supabase/tests/database supabase/tests/local"], "CI database gate");
