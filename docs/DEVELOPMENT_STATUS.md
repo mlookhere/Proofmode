@@ -90,7 +90,7 @@
 
 ### Completed integration audit pass
 - Media/Create runtime, authorization, recovery, provider lifecycle, cleanup, account isolation, focused-video behavior, Social Actions, Journey/Proof/Passport, and their shared database boundaries received another integration pass.
-- Cross-layer defects found by that audit are captured in Issue #25 / PR #26 and verified by migration `016`, pgTAP, full CI, hosted advisors, integrity queries, and rollback-only staging behavior checks.
+- Cross-layer defects found by that audit are captured in Issue #25 / PR #26 and verified by migration `016`, pgTAP, CI #107 on the pre-documentation code head, hosted advisors, integrity queries, and rollback-only staging behavior checks. The current documentation-only head still requires its final CI/control pass before merge.
 - Feed publication-time eligibility remains enforced by migration `009` and verified on staging.
 - Root dependency reproducibility remains locked and the prior high-severity Next/PostCSS/sharp findings remain remediated.
 - Mobile dependency findings remain captured with their exact Expo/uuid chain and are explicitly left upstream rather than force-fixed.
