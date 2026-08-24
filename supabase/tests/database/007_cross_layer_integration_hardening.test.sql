@@ -154,11 +154,16 @@ select is(
   (select j.id from public.journeys j where j.user_id = '10000000-0000-0000-0000-000000000041' and j.challenge_id = '20000000-0000-0000-0000-000000000041' and j.attempt_no = 2),
   'successful Reset post links to attempt two'
 );
+select set_config(
+  'proofmode.test_journey_id',
+  (select j.id::text from public.journeys j where j.user_id = '10000000-0000-0000-0000-000000000041' and j.challenge_id = '20000000-0000-0000-0000-000000000041' and j.attempt_no = 2),
+  true
+);
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"10000000-0000-0000-0000-000000000041","role":"authenticated"}', true);
 select is(
   public.assign_post_journey_v1('30000000-0000-0000-0000-000000000043', 'reset-success-0001'),
-  (select id from public.journeys where user_id = '10000000-0000-0000-0000-000000000041' and challenge_id = '20000000-0000-0000-0000-000000000041' and attempt_no = 2),
+  current_setting('proofmode.test_journey_id')::uuid,
   'post Journey assignment retry is idempotent'
 );
 reset role;
