@@ -36,21 +36,34 @@ function publishableKey() {
   return requiredEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
 }
 
+function bearerToken(request: Request) {
+  const authorization = request.headers.get("authorization") || "";
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  if (!match) throw new MediaApiError(401, "Authentication required");
+  return match[1];
+}
+
+function userClient(token: string): SupabaseClient {
+  return createSupabaseClient(supabaseUrl(), publishableKey(), {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { authorization: `Bearer ${token}` } },
+  });
+}
+
 export function adminClient(): SupabaseClient {
   return createSupabaseClient(supabaseUrl(), requiredEnv("SUPABASE_SERVICE_ROLE_KEY"), {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
 
-export async function requireBearerUser(request: Request): Promise<User> {
-  const authorization = request.headers.get("authorization") || "";
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
-  if (!match) throw new MediaApiError(401, "Authentication required");
+export function bearerClient(request: Request): SupabaseClient {
+  return userClient(bearerToken(request));
+}
 
-  const authClient = createSupabaseClient(supabaseUrl(), publishableKey(), {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  const { data, error } = await authClient.auth.getUser(match[1]);
+export async function requireBearerUser(request: Request): Promise<User> {
+  const token = bearerToken(request);
+  const authClient = userClient(token);
+  const { data, error } = await authClient.auth.getUser(token);
   if (error || !data.user) throw new MediaApiError(401, "Invalid or expired session");
   return data.user;
 }
