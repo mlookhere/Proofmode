@@ -171,13 +171,13 @@ export function verifyStreamWebhook(rawBody: string, signatureHeader: string | n
 export async function assertPublicChallengeMembership(admin: SupabaseClient, userId: string, challengeId: string) {
   const { data, error } = await admin
     .from("challenge_members")
-    .select("challenge_id, challenges!inner(visibility)")
+    .select("challenge_id, challenges!inner(visibility,format)")
     .eq("user_id", userId)
     .eq("challenge_id", challengeId)
     .maybeSingle();
   if (error) throw error;
-  const challenge = data?.challenges as unknown as { visibility?: string } | null;
-  if (!data || challenge?.visibility !== "public") {
+  const challenge = data?.challenges as unknown as { visibility?: string; format?: string } | null;
+  if (!data || challenge?.visibility !== "public" || challenge?.format !== "drop") {
     throw new MediaApiError(403, "Choose a public Drop you have joined");
   }
 }
