@@ -7,7 +7,7 @@
 
 ### Implemented and verified
 - Expo SDK 57 mobile app with Home / Explore / Post / Crews / You.
-- Supabase migrations `001` through `014` are applied to the connected Proofmode staging project.
+- Supabase migrations `001` through `015` are applied to the connected Proofmode staging project.
 - The canonical launch library is enforced at exactly 60 challenge templates.
 - RLS-only `SECURITY DEFINER` helpers live in the non-exposed `private` schema instead of public RPC space.
 - The obsolete `join_public_challenge` RPC is removed; `join_challenge_v2` is the single join path.
@@ -16,7 +16,7 @@
 - Migration `008` centralizes media/post lifecycle transitions, prevents one media asset from backing multiple posts, keeps media mutation server-owned, and reuses `job_outbox` for moderation.
 - Staging verification confirms the migration-008 index/functions/triggers exist and authenticated clients can read `media_assets` but cannot insert, update, or delete them.
 - A rollback-only staging lifecycle smoke verified `ready → moderation_pending`, one deduplicated moderation job, and `approved → published` without leaving test data.
-- Supabase security-advisor output after the media/feed/Social migrations is unchanged from the known intentional baseline.
+- Supabase security-advisor output after the media/feed/Social/Journey migrations is unchanged from the known intentional baseline for legacy public read/join definers; migration `015` adds no new exposed `SECURITY DEFINER` RPC.
 - Migration `009` explicitly excludes future-dated `published_at` rows from `get_feed_v1` without changing deterministic score or keyset ordering; rollback-only staging verification returned zero future rows and left no test data.
 - A staging consistency audit found zero published/unapproved mismatches, published posts backed by unready media, media/post owner mismatches, active orphan media, deleted-media/live-post mismatches, ready-approved unpublished posts, or due background jobs.
 - Social Actions migrations `010` through `014` are applied and verified on staging: RPC-owned follows/reactions/comments/block/report mutations, block-aware reads and aggregate privacy, Crew room messages/read models, invite creation, feed viewer relationship state, caller-only blocked-user listing, private privileged implementations, and Social-specific RLS/index performance hardening.
@@ -30,6 +30,20 @@
 - Crews tab loads signed-in Crew rooms; room detail includes members, proof-based leaderboard, recent activity, text thread, own-message deletion, and invite-code creation.
 - You includes a caller-only blocked-user list with unblock.
 - Social pgTAP coverage contains 47 transactional assertions for follow/reaction/comment/block/report/Crew invariants and the private privileged-RPC boundary. Foundation validation requires migrations `010` through `014`, ACL/RPC contracts, privacy/cursor invariants, Social performance hardening, mobile social surfaces, and the Social test file.
+- Social Actions Issue #21 / PR #22 is integrated into `dev` at squash commit `1fdddf46e62f8de0c833606c203e6c2fdbb62320` and is `state:release-ready`; it is integrated but is not represented as a new production release yet.
+- Journey/Proof/Passport migration `015` is applied and hosted-verified on staging. It reuses `journeys`, `proofs`, `verifications`, `posts`, challenge membership, and the media lifecycle instead of introducing a parallel reputation model.
+- Journey state is server/database-owned: at most one active attempt per user/Drop, Reset is retry-safe through an idempotency token, prior attempts remain history, and direct Journey/proof/verification mutation remains denied to client roles.
+- Published and approved Proof/Comeback/PR posts can create one canonical daily proof receipt through the publication lifecycle; Fail/Almost/Reset never create credibility receipts, and a long post caption is safely truncated only in the legacy 280-character ledger copy.
+- Journey follows are block-aware and blocking severs Journey-follow edges. Public Journey/Passport RPCs are `SECURITY INVOKER` wrappers over explicit private implementations.
+- Proof verification is separate from the social `Proven` reaction and requires an eligible challenge member other than the proof owner.
+- Passport metrics are server-derived. Referral/recruit counts and purchased plan/status are presentation/growth state and do not change Proof Score.
+- The v3 upload-intent path assigns the caller's Journey through an authenticated Supabase RPC while media/post lifecycle state remains server-owned; pending Reset uploads retain their idempotency token across retry.
+- Legacy web proof creation and verification now use the same authorized RPC boundary. Legacy proof media is verified against the caller's Supabase Storage path, while v3 R2/Stream receipts use their canonical media asset.
+- Mobile includes live Journey navigation/timeline, chronological chapters, Follow Journey, Join/Start same Drop, Run It Back, member Verify/Reject, feed Journey doorway, and expanded You/Passport metrics, active Journeys, Trophy Case, and recent posts.
+- Journey/Passport pgTAP contains 50 transactional assertions. CI #101 on branch head `e11f7f218073fcea21e520231ea2c579823cd0f9` passed Foundation, Database startup/lint/all pgTAP, Mobile typecheck, and Web typecheck/build.
+- Hosted Journey staging verification confirmed the migration ledger, RLS, six new indexes, two publication triggers, nine public invoker wrappers, private definer implementations, and no direct Journey/proof/verification write privileges for `anon` or `authenticated`.
+- Rollback-only hosted Journey verification covered active-attempt idempotency, publication receipt creation, 280-character receipt copy, Fail/Almost/Reset exclusion, member verification, Journey follow/read, block visibility and follow deletion, Reset idempotency, Passport derivation, and paid-plan neutrality. A follow/block sequencing check was rerun in a separate transaction after correcting an unordered smoke expression; fixture residue was zero afterward.
+- The staging performance advisor reports no unindexed foreign key introduced by migration `015`. Newly created Journey/Proof indexes naturally appear unused on a fresh staging dataset; remaining FK/RLS performance notices predate this slice and are not being mixed into Issue #23.
 - One mobile Supabase client with persistent AsyncStorage-backed sessions.
 - One root auth/session provider with foreground/background token refresh handling.
 - The plan-required email magic-link fallback is implemented with `proofmode://auth` deep-link session completion; the temporary password bootstrap is removed.
@@ -52,13 +66,14 @@
 - Root `next` is patched from `16.2.11` to `16.3.2`; the resulting lock resolves `postcss@8.5.23` and `sharp@0.35.3`, and both full and production-only root npm audits report zero vulnerabilities.
 - Next `16.3.2` passes ProofMode Web typecheck and production build with the existing `typescript@6.0.3` compatibility pin.
 - The mobile npm audit reports zero high/critical findings and 10 moderate findings in the Expo SDK-57 tooling graph. The concrete vulnerable chain is `expo@57.0.15 → @expo/config-plugins@57.0.8 → xcode@3.0.1 → uuid@7.0.3`; npm provides no safe SDK-57-compatible aggregate remediation, so no forced Expo rollback or unsupported uuid override is used.
-- Foundation validation covers migration contracts, media/runtime hardening, Social Actions/security/performance contracts, root package/lock parity, dependency security floors, TypeScript compatibility, and locked Web CI.
+- Foundation validation covers migration contracts, media/runtime hardening, Social Actions/security/performance contracts, Journey/Proof/Passport contracts, root package/lock parity, dependency security floors, TypeScript compatibility, and locked Web CI.
 - CI covers foundation validation, local Supabase startup, database linting, transactional pgTAP tests, mobile locked install/typecheck, and web locked install/typecheck/build.
-- GitHub Issues are the durable control plane: `main` is released history, `dev` is integration, and work/bug branches are Issue-backed. Native protected branches are unavailable on the current private-repository plan, so local pre-push blocking plus server-side branch-policy audit provide the documented soft enforcement.
+- GitHub Issues are the durable control plane: `main` is released history, `dev` is integration, and work/bug branches are Issue-backed. The repository is now public; current local pre-push/server-side control remains in force while native branch protection/rulesets can be evaluated separately without changing Issue #23 scope.
 
-### Social Actions integration pending
-- Issue #21 remains in review on `work/21-social-actions`; the implementation is CI- and staging-verified but is not part of `dev` until PR #22 passes the final post-documentation CI/control head and merges.
-- Do not represent Social Actions as integrated or released until that merge is complete.
+### Integration pending — Journey, Proof Ledger, and Passport MVP
+- Issue #23 remains open on `work/23-journey-proof-passport`; draft PR #24 targets `dev`.
+- The implementation is CI-verified and staging-verified through migration `015`, but it is not part of `dev` until the final post-checkpoint CI/control head passes and PR #24 merges.
+- Do not represent this slice as integrated, release-ready, or shipped until that merge is complete.
 
 ### Present but not fully external/device-verified
 - Hosted Supabase must allow `proofmode://auth` before physical-device magic-link testing; the local Supabase config already allows it.
@@ -77,7 +92,6 @@
 - Mobile dependency findings are captured with their exact Expo/uuid chain and are explicitly left upstream rather than force-fixed.
 
 ### Not implemented
-- Full Journey/proof ledger, streak/reset/comeback integration, and Passport history/metrics.
 - Sharing/attribution and hosted universal-link association files.
 - Push notifications/preferences.
 - RevenueCat monetization.
@@ -85,11 +99,10 @@
 
 ## Execution order from here
 
-1. **Finish Social Actions integration** — final post-checkpoint CI/control pass, then merge Issue #21 into `dev`.
-2. **Journey/proof integration** — proof ledger, streak/reset/comeback behavior, Passport metrics/history.
-3. **Sharing and attribution** — exact-content links, hosted association files, native share, invite attribution.
-4. **Push and monetization** — notification preferences/contextual push first, then RevenueCat.
-5. **Closed alpha** — seed content, small real communities, activation/retention/safety/media-cost validation.
+1. **Finish Journey/proof/Passport integration** — final post-checkpoint CI/control pass, mark PR #24 review-ready, then merge Issue #23 into `dev` only while control remains passing.
+2. **Sharing and attribution** — exact-content links, hosted association files, native share, invite attribution.
+3. **Push and monetization** — notification preferences/contextual push first, then RevenueCat.
+4. **Closed alpha** — seed content, small real communities, activation/retention/safety/media-cost validation.
 
 Auth provider/device configuration and Media/Create provider/device validation remain parallel release gates. They do not block safe code validation, but they must not be represented as complete until the real hosted/provider/device checks pass.
 
@@ -101,6 +114,7 @@ Auth provider/device configuration and Media/Create provider/device validation r
 - Keep internal `SECURITY DEFINER` helpers outside exposed schemas; expose only narrow invoker RPC wrappers when privileged implementation is necessary.
 - Reuse challenge membership/invites as the Crew container; do not add duplicate Crew membership infrastructure.
 - Social mutations with cross-table invariants stay RPC-owned; clients do not write those tables directly.
+- Journey/proof credibility mutations stay RPC/server-owned; clients never write proof, verification, or attempt state directly.
 - Media provider credentials and publication state stay server-owned.
 - Use the existing `job_outbox` before adding another queue service.
 - Backend values are canonical. UI formatting stays in UI/mappers.

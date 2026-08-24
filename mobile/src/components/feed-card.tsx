@@ -80,9 +80,15 @@ export function FeedCard({ item, height, active = false, onBlocked }: FeedCardPr
     if (isSupabaseConfigured) setSocialOpen(true);
   }
 
-  function openChallenge() {
+  function openPrimary() {
+    if (item.journeyId) {
+      router.push(`/journey/${item.journeyId}`);
+      return;
+    }
     if (item.challengeSlug) router.push(`/challenge/${item.challengeSlug}`);
   }
+
+  const hasPrimary = Boolean(item.journeyId || item.challengeSlug);
 
   return (
     <>
@@ -119,7 +125,7 @@ export function FeedCard({ item, height, active = false, onBlocked }: FeedCardPr
             </Pressable>
             <Text style={styles.reactionText}>↗ SHARE</Text>
           </View>
-          <Pressable accessibilityRole="button" disabled={!item.challengeSlug} onPress={openChallenge} style={[styles.cta, !item.challengeSlug && styles.ctaDisabled]}>
+          <Pressable accessibilityRole="button" disabled={!hasPrimary} onPress={openPrimary} style={[styles.cta, !hasPrimary && styles.ctaDisabled]}>
             <Text style={styles.ctaText}>{item.action} →</Text>
           </Pressable>
         </View>

@@ -17,6 +17,7 @@ export type FeedPost = Readonly<{
   handle: string;
   challengeId: string | null;
   challengeSlug: string | null;
+  journeyId: string | null;
   challenge: string;
   value: string;
   caption: string;

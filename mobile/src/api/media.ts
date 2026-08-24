@@ -4,7 +4,8 @@ import { requireApiUrl } from "@/config/env";
 import type { PostMode } from "@/domain";
 import { requireSupabase } from "@/lib/supabase";
 
-const PENDING_UPLOAD_PREFIX = "proofmode.pending-media-upload.v2";
+const PENDING_UPLOAD_PREFIX = "proofmode.pending-media-upload.v3";
+const LEGACY_PENDING_UPLOAD_V2_PREFIX = "proofmode.pending-media-upload.v2";
 const LEGACY_PENDING_UPLOAD_KEY = "proofmode.pending-media-upload.v1";
 
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -29,10 +30,11 @@ export type UploadDraft = Readonly<{
   kind: PostMode["title"];
   caption: string;
   media: SelectedMedia;
+  resetToken: string | null;
 }>;
 
 export type PendingUpload = Readonly<{
-  version: 2;
+  version: 3;
   userId: string;
   mediaId: string;
   postId: string;
@@ -40,17 +42,26 @@ export type PendingUpload = Readonly<{
   kind: PostMode["title"];
   caption: string;
   media: SelectedMedia;
+  resetToken: string | null;
 }>;
+
+type LegacyPendingUploadV2 = Omit<PendingUpload, "version" | "resetToken"> & { version: 2 };
 
 type UploadIntent = Readonly<{
   mediaId: string;
   postId: string;
+  journeyId: string;
   provider: "r2" | "stream";
   alreadyUploaded?: boolean;
   uploadUrl?: string;
   method?: "PUT" | "POST";
   headers?: Record<string, string>;
 }>;
+
+export function createResetToken() {
+  const random = `${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
+  return `reset-${Date.now()}-${random}`;
+}
 
 function pendingDirectory() {
   if (!FileSystem.documentDirectory) throw new Error("Persistent app storage is unavailable.");
@@ -59,6 +70,10 @@ function pendingDirectory() {
 
 function pendingUploadKey(userId: string) {
   return `${PENDING_UPLOAD_PREFIX}.${userId}`;
+}
+
+function legacyPendingUploadV2Key(userId: string) {
+  return `${LEGACY_PENDING_UPLOAD_V2_PREFIX}.${userId}`;
 }
 
 async function session() {
@@ -127,6 +142,7 @@ export async function createUploadIntent(draft: UploadDraft, resumeMediaId: stri
       width: draft.media.width,
       height: draft.media.height,
       durationSeconds: draft.media.durationSeconds,
+      resetToken: draft.resetToken,
       resumeMediaId,
     }),
   }) as Promise<UploadIntent>;
@@ -135,7 +151,7 @@ export async function createUploadIntent(draft: UploadDraft, resumeMediaId: stri
 export async function savePendingUpload(draft: UploadDraft, intent: UploadIntent) {
   const userId = (await session()).user.id;
   const pending: PendingUpload = {
-    version: 2,
+    version: 3,
     userId,
     mediaId: intent.mediaId,
     postId: intent.postId,
@@ -143,9 +159,33 @@ export async function savePendingUpload(draft: UploadDraft, intent: UploadIntent
     kind: draft.kind,
     caption: draft.caption,
     media: draft.media,
+    resetToken: draft.resetToken,
   };
   await AsyncStorage.setItem(pendingUploadKey(userId), JSON.stringify(pending));
   return pending;
+}
+
+async function loadLegacyV2(userId: string): Promise<PendingUpload | null> {
+  const key = legacyPendingUploadV2Key(userId);
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    const legacy = JSON.parse(raw) as LegacyPendingUploadV2;
+    if (legacy.version !== 2 || legacy.userId !== userId || !legacy.mediaId || !legacy.media?.uri) throw new Error("invalid");
+    const info = await FileSystem.getInfoAsync(legacy.media.uri);
+    if (!info.exists) throw new Error("missing media");
+    const pending: PendingUpload = {
+      ...legacy,
+      version: 3,
+      resetToken: legacy.kind === "reset" ? createResetToken() : null,
+    };
+    await AsyncStorage.setItem(pendingUploadKey(userId), JSON.stringify(pending));
+    await AsyncStorage.removeItem(key);
+    return pending;
+  } catch {
+    await AsyncStorage.removeItem(key);
+    return null;
+  }
 }
 
 export async function loadPendingUpload(): Promise<PendingUpload | null> {
@@ -161,10 +201,10 @@ export async function loadPendingUpload(): Promise<PendingUpload | null> {
 
   const key = pendingUploadKey(userId);
   const raw = await AsyncStorage.getItem(key);
-  if (!raw) return null;
+  if (!raw) return loadLegacyV2(userId);
   try {
     const pending = JSON.parse(raw) as PendingUpload;
-    if (pending.version !== 2 || pending.userId !== userId || !pending.mediaId || !pending.media?.uri) throw new Error("invalid");
+    if (pending.version !== 3 || pending.userId !== userId || !pending.mediaId || !pending.media?.uri) throw new Error("invalid");
     const info = await FileSystem.getInfoAsync(pending.media.uri);
     if (!info.exists) {
       await AsyncStorage.removeItem(key);
@@ -235,6 +275,7 @@ export async function retryPendingUpload(pending: PendingUpload, onProgress: (pr
     kind: pending.kind,
     caption: pending.caption,
     media: pending.media,
+    resetToken: pending.resetToken,
   };
   const intent = await createUploadIntent(draft, pending.mediaId);
   await uploadToProvider(pending.media, intent, onProgress);

@@ -10,6 +10,7 @@ import {
   asMediaApiResponse,
   assertPublicChallengeMembership,
   assertUploadRate,
+  bearerClient,
   createR2UploadUrl,
   createStreamDirectUpload,
   deleteProviderAsset,
@@ -35,6 +36,7 @@ type IntentBody = Readonly<{
   durationSeconds?: unknown;
   caption?: unknown;
   resumeMediaId?: unknown;
+  resetToken?: unknown;
 }>;
 
 function numberOrNull(value: unknown) {
@@ -60,12 +62,16 @@ function validateBody(body: IntentBody) {
   const durationSeconds = numberOrNull(body.durationSeconds);
   const caption = typeof body.caption === "string" ? body.caption.trim() : "";
   const resumeMediaId = typeof body.resumeMediaId === "string" ? body.resumeMediaId : null;
+  const resetToken = typeof body.resetToken === "string" ? body.resetToken.trim() : null;
 
   if (!challengeId) throw new MediaApiError(400, "challengeId is required");
   if (!POST_KINDS.has(kind)) throw new MediaApiError(400, "Invalid post kind");
   if (!mediaKind) throw new MediaApiError(400, "Invalid media kind");
   if (!bytes || bytes <= 0) throw new MediaApiError(400, "Media file size is required");
   if (caption.length > 1000) throw new MediaApiError(400, "Caption is too long");
+  if (kind === "reset" && (!resetToken || resetToken.length < 8 || resetToken.length > 120)) {
+    throw new MediaApiError(400, "Reset requires a valid retry token");
+  }
 
   if (mediaKind === "image") {
     if (!IMAGE_MIME_TYPES.has(mimeType)) throw new MediaApiError(400, "Unsupported image type");
@@ -78,7 +84,34 @@ function validateBody(body: IntentBody) {
     }
   }
 
-  return { challengeId, kind, mediaKind, mimeType, bytes, width, height, durationSeconds, caption, resumeMediaId } as const;
+  return {
+    challengeId,
+    kind,
+    mediaKind,
+    mimeType,
+    bytes,
+    width,
+    height,
+    durationSeconds,
+    caption,
+    resumeMediaId,
+    resetToken,
+  } as const;
+}
+
+async function assignJourney(request: Request, input: ReturnType<typeof validateBody>) {
+  const client = bearerClient(request);
+  const result = input.kind === "reset"
+    ? await client.rpc("reset_journey_v1", {
+        target_challenge: input.challengeId,
+        request_token: input.resetToken,
+      })
+    : await client.rpc("ensure_journey_v1", { target_challenge: input.challengeId });
+
+  if (result.error || typeof result.data !== "string") {
+    throw new MediaApiError(409, result.error?.message || "Could not assign this post to a Journey");
+  }
+  return result.data;
 }
 
 export async function POST(request: Request) {
@@ -102,14 +135,31 @@ export async function POST(request: Request) {
 
       const { data: post, error: postError } = await admin
         .from("posts")
-        .select("id, challenge_id")
+        .select("id, challenge_id, journey_id, kind")
         .eq("media_asset_id", asset.id)
         .maybeSingle();
       if (postError) throw postError;
-      if (!post || post.challenge_id !== input.challengeId) throw new MediaApiError(409, "Upload Drop changed; discard it and start again");
+      if (!post || post.challenge_id !== input.challengeId || post.kind !== input.kind) {
+        throw new MediaApiError(409, "Interrupted post details changed; discard it and start again");
+      }
+
+      let journeyId = post.journey_id as string | null;
+      if (!journeyId) {
+        journeyId = await assignJourney(request, input);
+        const { data: linked, error: linkError } = await admin
+          .from("posts")
+          .update({ journey_id: journeyId })
+          .eq("id", post.id)
+          .eq("user_id", user.id)
+          .is("journey_id", null)
+          .select("id")
+          .maybeSingle();
+        if (linkError) throw linkError;
+        if (!linked) throw new MediaApiError(409, "Interrupted post Journey changed; retry again");
+      }
 
       if (asset.processing_status === "processing" || asset.processing_status === "ready") {
-        return Response.json({ mediaId: asset.id, postId: post.id, provider: asset.provider, alreadyUploaded: true });
+        return Response.json({ mediaId: asset.id, postId: post.id, journeyId, provider: asset.provider, alreadyUploaded: true });
       }
       if (asset.processing_status === "deleted") {
         throw new MediaApiError(409, "Upload was already discarded");
@@ -132,6 +182,7 @@ export async function POST(request: Request) {
         return Response.json({
           mediaId: asset.id,
           postId: post.id,
+          journeyId,
           provider: "r2",
           uploadUrl: await createR2UploadUrl(asset.storage_key, input.mimeType),
           method: "PUT",
@@ -161,6 +212,7 @@ export async function POST(request: Request) {
         return Response.json({
           mediaId: asset.id,
           postId: post.id,
+          journeyId,
           provider: "stream",
           uploadUrl: direct.uploadURL,
           method: "POST",
@@ -171,6 +223,7 @@ export async function POST(request: Request) {
     }
 
     await assertUploadRate(admin, user.id);
+    const journeyId = await assignJourney(request, input);
     const mediaId = randomUUID();
     const postId = randomUUID();
     const provider = input.mediaKind === "image" ? "r2" : "stream";
@@ -214,6 +267,7 @@ export async function POST(request: Request) {
       id: postId,
       user_id: user.id,
       challenge_id: input.challengeId,
+      journey_id: journeyId,
       media_asset_id: mediaId,
       kind: input.kind,
       caption: input.caption || null,
@@ -230,6 +284,7 @@ export async function POST(request: Request) {
     return Response.json({
       mediaId,
       postId,
+      journeyId,
       provider,
       uploadUrl,
       method,

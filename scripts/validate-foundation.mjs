@@ -29,6 +29,7 @@ assert(JSON.stringify(migrations) === JSON.stringify([
   "012_social_read_privacy.sql",
   "013_social_rpc_boundary.sql",
   "014_social_performance_hardening.sql",
+  "015_journey_proof_passport.sql",
 ]), `Unexpected migration set: ${migrations.join(", ")}`);
 
 const templatesSql = await read("supabase/migrations/004_template_library.sql");
@@ -177,6 +178,43 @@ requireAll(socialPerformanceSql, [
   "id = (select auth.uid())",
 ], "Social performance hardening");
 
+const journeySql = await read("supabase/migrations/015_journey_proof_passport.sql");
+requireAll(journeySql, [
+  "journeys_active_user_challenge_idx",
+  "journeys_attempt_token_idx",
+  "proofs_post_unique_idx",
+  "create table if not exists public.journey_follows",
+  "alter table public.journey_follows enable row level security",
+  'drop policy if exists "visible journeys" on public.journeys',
+  "private.can_view_journey_v1",
+  "private.ensure_journey_v1",
+  "private.reset_journey_v1",
+  "private.set_journey_follow_v1",
+  "private.set_proof_verification_v1",
+  "private.sync_published_post_proof_v1",
+  "new.kind not in ('proof', 'comeback', 'pr')",
+  "private.get_journey_snapshot_v1",
+  "private.get_profile_snapshot_v2",
+  "alter function public.get_journey_posts(uuid) set schema private",
+  "security invoker set search_path = ''",
+  "select private.ensure_journey_v1",
+  "select private.reset_journey_v1",
+  "select private.set_proof_verification_v1",
+], "Journey/Passport migration");
+for (const table of ["journeys", "journey_follows", "proofs", "verifications"]) {
+  assert(journeySql.includes(`revoke insert, update, delete on table public.${table} from anon, authenticated`), `Journey credibility writes are not RPC-only for ${table}`);
+}
+const legacyJourneyWrapper = journeySql.slice(
+  journeySql.indexOf("create function public.get_journey_posts(target_journey uuid)"),
+  journeySql.indexOf("-- Replace the old public profile definer"),
+);
+for (const field of ["post_id uuid", "kind text", "caption text", "published_at timestamptz", "proof_id uuid", "media_kind text", "media_public_url text", "media_playback_id text"]) {
+  assert(legacyJourneyWrapper.includes(field), `Legacy Journey wrapper lost field: ${field}`);
+}
+for (const changedField of ["user_id uuid", "handle text", "challenge_id uuid"]) {
+  assert(!legacyJourneyWrapper.includes(changedField), `Legacy Journey wrapper unexpectedly changed shape: ${changedField}`);
+}
+
 const mobilePackage = JSON.parse(await read("mobile/package.json"));
 const mobileLock = JSON.parse(await read("mobile/package-lock.json"));
 const mobileAppConfig = JSON.parse(await read("mobile/app.json")).expo;
@@ -207,11 +245,11 @@ const rootLayout = await read("mobile/app/_layout.tsx");
 assert(rootLayout.includes("<AuthProvider>"), "Mobile root is missing AuthProvider");
 
 const mobileFeed = await read("mobile/src/api/feed.ts");
-requireAll(mobileFeed, ['rpc("get_feed_v1"', "cursor_post_id", "media_public_url", "media_kind", "viewer_follows", "viewer_reaction"], "Mobile feed");
+requireAll(mobileFeed, ['rpc("get_feed_v1"', "cursor_post_id", "media_public_url", "media_kind", "viewer_follows", "viewer_reaction", "journey_id", "journeyId"], "Mobile feed");
 const mobileHome = await read("mobile/app/(tabs)/index.tsx");
 requireAll(mobileHome, ["onEndReached", "onViewableItemsChanged", "activePostId", "useFocusEffect", "feedFocused && activePostId", 'media?.kind === "video"', "hideBlockedUser"], "Mobile Home");
 const feedCard = await read("mobile/src/components/feed-card.tsx");
-requireAll(feedCard, ["VideoView", "useVideoPlayer", "<Image", "setFollow", "PostSocialModal", "Could not update follow"], "Feed card");
+requireAll(feedCard, ["VideoView", "useVideoPlayer", "<Image", "setFollow", "PostSocialModal", "Could not update follow", "item.journeyId", "/journey/"], "Feed card");
 
 const mobileSocial = await read("mobile/src/api/social.ts");
 for (const rpc of [
@@ -238,21 +276,31 @@ const mobileCrews = await read("mobile/app/(tabs)/crews.tsx");
 const mobileCrewRoom = await read("mobile/app/crew/[id].tsx");
 requireAll(mobileCrews, ["fetchMyCrews", "/crew/"], "Crews tab");
 requireAll(mobileCrewRoom, ["fetchCrewRoom", "postCrewMessage", "deleteCrewMessage", "createCrewInvite", "leaderboard", "recent_activity", "messages"], "Crew room");
+
+const mobileJourney = await read("mobile/src/api/journey.ts");
+for (const rpc of ["get_journey_snapshot_v1", "get_my_journey_for_drop_v1", "ensure_journey_v1", "reset_journey_v1", "set_journey_follow_v1", "set_proof_verification_v1"]) {
+  assert(mobileJourney.includes(`"${rpc}"`), `Mobile Journey API is missing ${rpc}`);
+}
+const mobileJourneyRoute = await read("mobile/app/journey/[id].tsx");
+requireAll(mobileJourneyRoute, ["fetchJourneySnapshot", "setJourneyFollow", "setProofVerification", "RUN IT BACK", "START FROM DAY 1", "JOIN SAME DROP", "verified_count", "current_streak", "best_streak"], "Journey route");
+
 const mobileYou = await read("mobile/app/(tabs)/you.tsx");
-requireAll(mobileYou, ["fetchMyBlocks", "UNBLOCK", "setBlock"], "Blocked-user management");
+requireAll(mobileYou, ["fetchMyBlocks", "UNBLOCK", "setBlock", "PROOF SCORE", "DROPS DONE", "CURRENT STREAK", "BEST STREAK", "COMEBACKS", "ACTIVE JOURNEYS", "TROPHY CASE", "RECENT POSTS", "/journey/"], "Passport/blocked-user management");
+const mobileProfile = await read("mobile/src/api/profile.ts");
+requireAll(mobileProfile, ["completed_drops", "current_streak", "best_streak", "comeback_count", "active_journeys", "trophy_case", "recent_posts", '"black"'], "Passport API");
 
 const mobileChallenges = await read("mobile/src/api/challenges.ts");
 const mobileExplore = await read("mobile/app/(tabs)/explore.tsx");
 const mobileChallengeRoute = await read("mobile/app/challenge/[slug].tsx");
 requireAll(mobileChallenges, ['.from("challenges")', 'rpc("join_challenge_v2"', "fetchJoinedPublicChallenges"], "Mobile challenges");
 requireAll(mobileExplore, ["fetchPublicChallenges", "/challenge/"], "Mobile Explore");
-requireAll(mobileChallengeRoute, ['runAction("join")', 'runAction("watch")', "ReportModal", "REPORT DROP", "textStyle={styles.secondaryButtonText}"], "Challenge route");
+requireAll(mobileChallengeRoute, ['runAction("join")', 'runAction("watch")', "ReportModal", "REPORT DROP", "fetchMyJourneyForDrop", "ensureJourney", "CONTINUE JOURNEY", "START JOURNEY"], "Challenge route");
 
 const mobileCreate = await read("mobile/app/(tabs)/create.tsx");
-requireAll(mobileCreate, ["launchCameraAsync", "launchImageLibraryAsync", "MAX_VIDEO_SECONDS", "loadPendingUpload", "retryPendingUpload", "POST PROOF"], "Mobile Create");
+requireAll(mobileCreate, ["launchCameraAsync", "launchImageLibraryAsync", "MAX_VIDEO_SECONDS", "loadPendingUpload", "retryPendingUpload", "createResetToken", "resetToken", "POST {mode.toUpperCase()}"], "Mobile Create");
 assert(mobileCreate.includes("const userId = session?.user.id") && mobileCreate.includes("setChallengeId(joined[0]?.id || \"\")"), "Composer state is not reset safely across account changes");
 const mobileMedia = await read("mobile/src/api/media.ts");
-requireAll(mobileMedia, ["createUploadTask", "BINARY_CONTENT", "MULTIPART", "proofmode.pending-media-upload.v2", "/api/media/upload-intent", "/api/media/finalize"], "Mobile media client");
+requireAll(mobileMedia, ["createUploadTask", "BINARY_CONTENT", "MULTIPART", "proofmode.pending-media-upload.v3", "LEGACY_PENDING_UPLOAD_V2_PREFIX", "resetToken", "/api/media/upload-intent", "/api/media/finalize"], "Mobile media client");
 assert(mobileMedia.includes("pendingUploadKey(userId)") && mobileMedia.includes("pending.userId !== currentUserId"), "Interrupted upload state is not account scoped");
 assert(!/SUPABASE_SERVICE_ROLE_KEY|CLOUDFLARE_[A-Z_]+/.test(mobileMedia), "Server media credentials leaked into mobile code");
 
@@ -264,10 +312,10 @@ for (const route of [
   "app/api/media/cleanup/route.ts",
 ]) await read(route);
 const mediaServer = await read("lib/media/server.ts");
-requireAll(mediaServer, ["requireBearerUser", "SUPABASE_SERVICE_ROLE_KEY", "getSignedUrl", "timingSafeEqual", "MAX_VIDEO_BYTES", "MAX_VIDEO_SECONDS"], "Media backend");
+requireAll(mediaServer, ["requireBearerUser", "bearerClient", "SUPABASE_SERVICE_ROLE_KEY", "getSignedUrl", "timingSafeEqual", "MAX_VIDEO_BYTES", "MAX_VIDEO_SECONDS"], "Media backend");
 assert(mediaServer.includes("challenges!inner(visibility,format)") && mediaServer.includes('challenge?.format !== "drop"'), "Media authorization does not require a public Drop");
 const uploadIntent = await read("app/api/media/upload-intent/route.ts");
-requireAll(uploadIntent, ["assertPublicChallengeMembership", "assertUploadRate", "RECOVERABLE_MEDIA_STATES", "Upload is no longer in a retryable state", "playback_id: direct.uid", "playback_id: previousUid"], "Upload intent");
+requireAll(uploadIntent, ["assertPublicChallengeMembership", "assertUploadRate", "RECOVERABLE_MEDIA_STATES", "Upload is no longer in a retryable state", "playback_id: direct.uid", "playback_id: previousUid", "bearerClient", 'rpc("ensure_journey_v1"', 'rpc("reset_journey_v1"', "journey_id: journeyId", "resetToken", "post.journey_id"], "Upload intent");
 const finalize = await read("app/api/media/finalize/route.ts");
 assert(finalize.includes("assertPublicChallengeMembership") && finalize.includes("initialPost.challenge_id"), "Finalize does not reauthorize current Drop membership");
 assert(finalize.includes('asset.processing_status === "deleted"'), "Finalize can revive discarded media");
@@ -276,6 +324,14 @@ requireAll(streamWebhook, ["verifyStreamWebhook", 'processing_status: "ready"', 
 const cleanup = await read("app/api/media/cleanup/route.ts");
 assert(cleanup.includes("CRON_SECRET") && cleanup.includes('processing_status: "deleted"'), "Media cleanup is not protected or stateful");
 assert(cleanup.includes('["pending", "uploading", "processing", "failed"]'), "Cleanup does not recover stuck processing uploads");
+
+const legacyProofRoute = await read("app/api/proofs/route.ts");
+requireAll(legacyProofRoute, ['rpc("create_legacy_proof_v1"', "target_media_url", "proofId"], "Legacy proof route");
+assert(!legacyProofRoute.includes('.from("proofs").insert'), "Legacy proof route can still bypass proof RPC");
+const verificationRoute = await read("app/api/verifications/route.ts");
+requireAll(verificationRoute, ['rpc("set_proof_verification_v1"', "target_proof", "target_verdict"], "Verification route");
+assert(!verificationRoute.includes('.from("verifications").upsert'), "Verification route can still bypass verification RPC");
+
 const vercel = JSON.parse(await read("vercel.json"));
 assert(vercel.crons?.some((cron) => cron.path === "/api/media/cleanup"), "Vercel media cleanup cron is missing");
 
@@ -294,6 +350,7 @@ for (const testFile of [
   "supabase/tests/database/003_security_hardening.test.sql",
   "supabase/tests/database/004_media_lifecycle.test.sql",
   "supabase/tests/database/005_social_actions.test.sql",
+  "supabase/tests/database/006_journey_proof_passport.test.sql",
   "supabase/tests/local/003_feed_pagination.test.sql",
 ]) {
   const sql = await read(testFile);
@@ -302,6 +359,9 @@ for (const testFile of [
   assert(Number.isInteger(plan) && plan === assertions, `pgTAP plan mismatch in ${testFile}: plan=${plan}, assertions=${assertions}`);
   assert(sql.includes("select * from finish()") && sql.trimEnd().endsWith("rollback;"), `Invalid transactional pgTAP file: ${testFile}`);
 }
+
+const journeyTest = await read("supabase/tests/database/006_journey_proof_passport.test.sql");
+requireAll(journeyTest, ["select plan(50)", "only one active Journey exists", "Reset retry cannot manufacture attempts", "Fail never becomes a proof receipt", "Almost never becomes a proof receipt", "Reset never becomes a proof receipt", "broken streak preserves best historical run", "challenge membership required", "paid/status plan cannot change Proof Score", "blocking severs Journey follows"], "Journey pgTAP");
 
 const ci = await read(".github/workflows/ci.yml");
 requireAll(ci, ["supabase/setup-cli@v2", "supabase start", "supabase db lint --level error --fail-on error", "supabase test db supabase/tests/database supabase/tests/local"], "CI database gate");
