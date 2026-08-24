@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { setFollow, type ReactionKind } from "@/api/social";
@@ -69,6 +69,8 @@ export function FeedCard({ item, height, active = false, onBlocked }: FeedCardPr
     setFollowBusy(true);
     try {
       setFollowing(await setFollow(item.userId, !following));
+    } catch {
+      Alert.alert("Could not update follow", "Try again in a moment.");
     } finally {
       setFollowBusy(false);
     }
