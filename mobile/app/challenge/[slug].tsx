@@ -146,10 +146,16 @@ export default function ChallengeScreen() {
           <PrimaryButton onPress={isMutating || viewerState.joined ? undefined : () => void runAction("join")}>
             {viewerState.joined ? "JOINED" : isMutating ? "WORKING…" : "JOIN DROP"}
           </PrimaryButton>
-          <PrimaryButton onPress={isMutating ? undefined : () => void runAction("watch")} style={styles.secondaryButton}>
+          <PrimaryButton
+            onPress={isMutating ? undefined : () => void runAction("watch")}
+            style={styles.secondaryButton}
+            textStyle={styles.secondaryButtonText}
+          >
             {viewerState.watched ? "UNWATCH" : "WATCH"}
           </PrimaryButton>
-          <PrimaryButton onPress={openReport} style={styles.reportButton}>REPORT DROP</PrimaryButton>
+          <PrimaryButton onPress={openReport} style={styles.reportButton} textStyle={styles.secondaryButtonText}>
+            REPORT DROP
+          </PrimaryButton>
         </View>
 
         {!session ? <Text style={styles.note}>You can view this Drop without an account. Sign-in is only required when you Join, Watch, or Report.</Text> : null}
@@ -172,6 +178,7 @@ const styles = StyleSheet.create({
   meta: { color: colors.text, backgroundColor: colors.panel2, paddingHorizontal: 10, paddingVertical: 8, borderRadius: radius.sm, fontSize: 10, fontWeight: "900", overflow: "hidden" },
   actions: { gap: spacing.md, marginTop: spacing.xl },
   secondaryButton: { backgroundColor: colors.panel2, borderColor: colors.line, borderWidth: 1 },
+  secondaryButtonText: { color: colors.text },
   reportButton: { backgroundColor: "transparent", borderColor: colors.line, borderWidth: 1 },
   error: { color: colors.danger, lineHeight: 20, marginTop: spacing.lg },
   note: { color: colors.muted, lineHeight: 20, marginTop: spacing.lg },
