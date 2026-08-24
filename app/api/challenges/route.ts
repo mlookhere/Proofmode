@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       if (visibility === "private") return NextResponse.redirect(new URL("/pricing?reason=private_crew", request.url), 303);
     }
 
-    const planCap = plan === "creator" ? 100000 : plan === "pro" ? 25 : 5;
+    const planCap = plan === "creator" || plan === "black" ? 100000 : plan === "pro" ? 25 : 5;
     const seatCap = format === "drop" ? Math.min(requestedSeatCap > 0 ? requestedSeatCap : planCap, planCap) : null;
     const insert = {
       owner_id: user.id, title, slug, rule, duration_days: duration, visibility,
