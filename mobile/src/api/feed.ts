@@ -1,5 +1,5 @@
 import { colors } from "@/theme";
-import { postKinds, type FeedPost, type PostKind } from "@/domain";
+import { postKinds, type FeedPost, type FeedReaction, type PostKind } from "@/domain";
 import { requireSupabase } from "@/lib/supabase";
 
 type FeedRow = Readonly<{
@@ -7,15 +7,19 @@ type FeedRow = Readonly<{
   kind: string;
   caption: string | null;
   published_at: string;
+  user_id: string;
   handle: string | null;
   display_name: string | null;
   challenge_id: string | null;
+  challenge_slug: string | null;
   challenge_title: string | null;
   proof_id: string | null;
   media_kind: "image" | "video" | null;
   media_public_url: string | null;
   reaction_count: number | string;
   comment_count: number | string;
+  viewer_follows: boolean | null;
+  viewer_reaction: FeedReaction | null;
   score: number | string;
 }>;
 
@@ -45,13 +49,6 @@ function asPostKind(value: string): PostKind {
   return postKinds.includes(value as PostKind) ? (value as PostKind) : "proof";
 }
 
-function compactCount(value: number | string) {
-  const count = Number(value) || 0;
-  if (count < 1_000) return String(count);
-  if (count < 1_000_000) return `${(count / 1_000).toFixed(count >= 10_000 ? 0 : 1)}K`;
-  return `${(count / 1_000_000).toFixed(count >= 10_000_000 ? 0 : 1)}M`;
-}
-
 function displayDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase();
 }
@@ -72,16 +69,21 @@ function toFeedPost(row: FeedRow): FeedPost {
 
   return {
     id: row.post_id,
+    userId: row.user_id,
     kind,
     day: displayDate(row.published_at),
     user: row.display_name?.trim() || row.handle || "PROVER",
     handle,
+    challengeId: row.challenge_id,
+    challengeSlug: row.challenge_slug,
     challenge: row.challenge_title || "PROOFMODE",
     value: displayMark(kind),
     caption: row.caption?.trim() || "Proof posted.",
     accent: accentByKind[kind],
-    reactions: compactCount(row.reaction_count),
-    comments: compactCount(row.comment_count),
+    reactions: Number(row.reaction_count) || 0,
+    comments: Number(row.comment_count) || 0,
+    viewerFollows: Boolean(row.viewer_follows),
+    viewerReaction: row.viewer_reaction,
     action: row.challenge_id ? "VIEW CHALLENGE" : row.proof_id ? "VIEW PROOF" : "VIEW POST",
     media,
   };
