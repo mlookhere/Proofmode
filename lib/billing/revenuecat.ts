@@ -36,6 +36,17 @@ export function revenueCatAdminClient(): SupabaseClient {
   });
 }
 
+export async function claimRevenueCatRefresh(admin: SupabaseClient, userId: string) {
+  if (!isProofModeUserId(userId)) throw new RevenueCatError(400, "Invalid ProofMode App User ID");
+  const { data, error } = await admin.rpc("claim_revenuecat_refresh_v1", { target_user_id: userId });
+  if (error) throw new RevenueCatError(500, "Could not claim RevenueCat refresh window");
+  const retryAfterSeconds = Number(data);
+  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds < 0) {
+    throw new RevenueCatError(500, "Invalid RevenueCat refresh window state");
+  }
+  return Math.ceil(retryAfterSeconds);
+}
+
 export function verifyRevenueCatWebhook(rawBody: string, authorization: string | null, signatureHeader: string | null) {
   const expectedAuthorization = requiredEnv("REVENUECAT_WEBHOOK_AUTH");
   if (!authorization || !safeEqual(authorization, expectedAuthorization)) {
