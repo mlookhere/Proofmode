@@ -9,6 +9,7 @@ import {
 } from "@/api/notifications";
 import { AuthRequired } from "@/components/auth-required";
 import { PrimaryButton, Screen, Surface } from "@/components/ui";
+import { usePushNotifications } from "@/notifications/runtime";
 import { colors, radius, spacing } from "@/theme";
 
 type ToggleKey = "social" | "drop_updates" | "streak_risk" | "crew_position" | "journey_updates" | "invites";
@@ -30,6 +31,19 @@ function validTime(value: string) {
   if (!/^\d{2}:\d{2}$/.test(value)) return false;
   const [hour, minute] = value.split(":").map(Number);
   return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
+function pushStatusCopy(status: ReturnType<typeof usePushNotifications>["status"]) {
+  switch (status) {
+    case "registered": return "This device is registered for ProofMode push notifications.";
+    case "registering": return "Registering this device…";
+    case "not_granted": return "Device push is off. ProofMode will only ask for permission when you press Enable Device Push.";
+    case "not_configured": return "This build does not have an EAS project ID yet, so it cannot obtain an Expo Push Token.";
+    case "account_mismatch": return "This device token is still associated with another signed-in account. Sign out there before switching accounts.";
+    case "unsupported": return "Remote push registration is available on the native iOS and Android apps.";
+    case "error": return "This device could not be registered for push.";
+    default: return "ProofMode does not ask for notification permission during cold onboarding.";
+  }
 }
 
 function PreferenceRow({
@@ -59,6 +73,7 @@ function PreferenceRow({
 export default function NotificationSettings() {
   const router = useRouter();
   const { session, isLoading: isSessionLoading } = useAuth();
+  const push = usePushNotifications();
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const [quietStart, setQuietStart] = useState("");
   const [quietEnd, setQuietEnd] = useState("");
@@ -141,9 +156,22 @@ export default function NotificationSettings() {
       <Text style={styles.title}>NOTIFICATIONS</Text>
       <Text style={styles.intro}>ProofMode only uses push for activity and stakes tied to what you actually follow, joined, or earned. Each class is independent.</Text>
 
+      <Text style={styles.sectionLabel}>DEVICE PUSH</Text>
+      <Surface style={styles.deviceCard}>
+        <Text style={styles.preferenceTitle}>{push.status === "registered" ? "ENABLED" : "OFF UNTIL YOU ENABLE IT"}</Text>
+        <Text style={styles.preferenceDetail}>{pushStatusCopy(push.status)}</Text>
+        {push.error ? <Text style={styles.error}>{push.error}</Text> : null}
+        {push.status !== "registered" && push.status !== "unsupported" ? (
+          <View style={styles.deviceAction}>
+            <PrimaryButton onPress={() => void push.enable()}>{push.status === "registering" ? "REGISTERING…" : "ENABLE DEVICE PUSH"}</PrimaryButton>
+          </View>
+        ) : null}
+      </Surface>
+
       {isLoading && !preferences ? <ActivityIndicator color={colors.hot} style={styles.loader} /> : null}
       {preferences ? (
         <>
+          <Text style={styles.sectionLabel}>WHAT CAN REACH YOU</Text>
           <Surface style={styles.list}>
             {rows.map((row) => (
               <PreferenceRow
@@ -217,6 +245,8 @@ const styles = StyleSheet.create({
   intro: { color: colors.muted, lineHeight: 20, marginTop: spacing.sm, marginBottom: spacing.lg },
   loader: { marginVertical: spacing.xl },
   list: { paddingHorizontal: spacing.md },
+  deviceCard: { padding: spacing.md, borderRadius: radius.md },
+  deviceAction: { marginTop: spacing.md },
   preferenceRow: { minHeight: 88, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },
   preferenceCopy: { flex: 1, paddingVertical: spacing.md },
   preferenceTitle: { color: colors.text, fontSize: 12, fontWeight: "900", letterSpacing: 0.7 },
