@@ -56,7 +56,9 @@ async function ensureConfigured(userId: string) {
 export function syncRevenueCatIdentity(userId: string | null) {
   identityQueue = identityQueue.then(async () => {
     if (!userId) {
-      if (configured && currentUserId) await Purchases.logOut().catch(() => undefined);
+      // ProofMode intentionally uses only Supabase UUID App User IDs. RevenueCat logOut()
+      // would create an anonymous ID; leave the SDK parked on its prior identified user
+      // while signed out, then switch directly with logIn(newUuid) on the next session.
       currentUserId = null;
       return false;
     }
