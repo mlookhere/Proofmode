@@ -31,6 +31,7 @@ assert(JSON.stringify(migrations) === JSON.stringify([
   "014_social_performance_hardening.sql",
   "015_journey_proof_passport.sql",
   "016_cross_layer_integration_hardening.sql",
+  "017_sharing_attribution.sql",
 ]), `Unexpected migration set: ${migrations.join(", ")}`);
 
 const templatesSql = await read("supabase/migrations/004_template_library.sql");
@@ -236,6 +237,28 @@ requireAll(integrationSql, [
   "select * from private.get_feed_v1",
 ], "Cross-layer hardening migration");
 
+const sharingSql = await read("supabase/migrations/017_sharing_attribution.sql");
+requireAll(sharingSql, [
+  "private.get_public_post_share_v1",
+  "private.get_public_receipt_share_v1",
+  "private.resolve_invite_share_v1",
+  "public.get_public_post_share_v1",
+  "public.get_public_receipt_share_v1",
+  "public.resolve_invite_share_v1",
+  "security invoker",
+  "security definer",
+  "p.visibility = 'public'",
+  "p.status = 'published'",
+  "p.moderation_status = 'approved'",
+  "p.published_at <= now()",
+  "c.visibility = 'public'",
+  "private.is_blocked_pair(auth.uid(), p.user_id)",
+  "grant execute on function public.get_public_post_share_v1(uuid) to anon, authenticated, service_role",
+  "grant execute on function public.get_public_receipt_share_v1(uuid) to anon, authenticated, service_role",
+  "grant execute on function public.resolve_invite_share_v1(text) to anon, authenticated, service_role",
+], "Sharing/attribution migration");
+assert(!/create\s+table(?:\s+if\s+not\s+exists)?\s+public\.receipts/i.test(sharingSql), "Sharing migration must reuse proofs instead of creating a Receipt ledger");
+
 const mobilePackage = JSON.parse(await read("mobile/package.json"));
 const mobileLock = JSON.parse(await read("mobile/package-lock.json"));
 const mobileAppConfig = JSON.parse(await read("mobile/app.json")).expo;
@@ -254,6 +277,9 @@ for (const dependency of [
   assert(mobilePackage.dependencies?.[dependency], `Missing mobile dependency: ${dependency}`);
   assert(mobileLock.packages?.[""]?.dependencies?.[dependency], `Mobile lockfile is missing: ${dependency}`);
 }
+for (const forbidden of ["tiktok", "snapchat", "instagram", "creative-kit"]) {
+  assert(!JSON.stringify(mobilePackage.dependencies || {}).toLowerCase().includes(forbidden), `Platform posting SDK is out of MVP scope: ${forbidden}`);
+}
 
 const rootPackage = JSON.parse(await read("package.json"));
 for (const dependency of ["@aws-sdk/client-s3", "@aws-sdk/s3-request-presigner"]) {
@@ -270,7 +296,7 @@ requireAll(mobileFeed, ['rpc("get_feed_v1"', "cursor_post_id", "media_public_url
 const mobileHome = await read("mobile/app/(tabs)/index.tsx");
 requireAll(mobileHome, ["onEndReached", "onViewableItemsChanged", "activePostId", "useFocusEffect", "feedFocused && activePostId", 'media?.kind === "video"', "hideBlockedUser"], "Mobile Home");
 const feedCard = await read("mobile/src/components/feed-card.tsx");
-requireAll(feedCard, ["VideoView", "useVideoPlayer", "<Image", "setFollow", "PostSocialModal", "Could not update follow", "item.journeyId", "/journey/"], "Feed card");
+requireAll(feedCard, ["VideoView", "useVideoPlayer", "<Image", "setFollow", "PostSocialModal", "Could not update follow", "item.journeyId", "/journey/", "shareCanonical", 'path: `/p/${item.id}`', 'source: "feed_share"'], "Feed card");
 
 const mobileSocial = await read("mobile/src/api/social.ts");
 for (const rpc of [
@@ -296,26 +322,45 @@ requireAll(reportModal, ["reportReasons.map", "submitReport"], "Report modal");
 const mobileCrews = await read("mobile/app/(tabs)/crews.tsx");
 const mobileCrewRoom = await read("mobile/app/crew/[id].tsx");
 requireAll(mobileCrews, ["fetchMyCrews", "/crew/"], "Crews tab");
-requireAll(mobileCrewRoom, ["fetchCrewRoom", "postCrewMessage", "deleteCrewMessage", "createCrewInvite", "leaderboard", "recent_activity", "messages"], "Crew room");
+requireAll(mobileCrewRoom, ["fetchCrewRoom", "postCrewMessage", "deleteCrewMessage", "createCrewInvite", "leaderboard", "recent_activity", "messages", "shareCanonical", 'source: "crew_invite_share"'], "Crew room");
 
 const mobileJourney = await read("mobile/src/api/journey.ts");
 for (const rpc of ["get_journey_snapshot_v1", "get_my_journey_for_drop_v1", "ensure_journey_v1", "reset_journey_v1", "set_journey_follow_v1", "set_proof_verification_v1"]) {
   assert(mobileJourney.includes(`"${rpc}"`), `Mobile Journey API is missing ${rpc}`);
 }
 const mobileJourneyRoute = await read("mobile/app/journey/[id].tsx");
-requireAll(mobileJourneyRoute, ["fetchJourneySnapshot", "setJourneyFollow", "setProofVerification", "RUN IT BACK", "START FROM DAY 1", "JOIN SAME DROP", "verified_count", "current_streak", "best_streak"], "Journey route");
+requireAll(mobileJourneyRoute, ["fetchJourneySnapshot", "setJourneyFollow", "setProofVerification", "RUN IT BACK", "START FROM DAY 1", "JOIN SAME DROP", "verified_count", "current_streak", "best_streak", "SHARE JOURNEY", "shareCanonical", "/r/${proofId}"], "Journey route");
 
 const mobileYou = await read("mobile/app/(tabs)/you.tsx");
 requireAll(mobileYou, ["fetchMyBlocks", "UNBLOCK", "setBlock", "PROOF SCORE", "DROPS DONE", "CURRENT STREAK", "BEST STREAK", "COMEBACKS", "ACTIVE JOURNEYS", "TROPHY CASE", "RECENT POSTS", "/journey/"], "Passport/blocked-user management");
 const mobileProfile = await read("mobile/src/api/profile.ts");
-requireAll(mobileProfile, ["completed_drops", "current_streak", "best_streak", "comeback_count", "active_journeys", "trophy_case", "recent_posts", '"black"'], "Passport API");
+requireAll(mobileProfile, ["completed_drops", "current_streak", "best_streak", "comeback_count", "active_journeys", "trophy_case", "recent_posts", '"black"', "fetchPublicProfile"], "Passport API");
 
 const mobileChallenges = await read("mobile/src/api/challenges.ts");
 const mobileExplore = await read("mobile/app/(tabs)/explore.tsx");
 const mobileChallengeRoute = await read("mobile/app/challenge/[slug].tsx");
 requireAll(mobileChallenges, ['.from("challenges")', 'rpc("join_challenge_v2"', "fetchJoinedPublicChallenges"], "Mobile challenges");
 requireAll(mobileExplore, ["fetchPublicChallenges", "/challenge/"], "Mobile Explore");
-requireAll(mobileChallengeRoute, ['runAction("join")', 'runAction("watch")', "ReportModal", "REPORT DROP", "fetchMyJourneyForDrop", "ensureJourney", "CONTINUE JOURNEY", "START JOURNEY"], "Challenge route");
+requireAll(mobileChallengeRoute, ['runAction("join")', 'runAction("watch")', "ReportModal", "REPORT DROP", "fetchMyJourneyForDrop", "ensureJourney", "CONTINUE JOURNEY", "START JOURNEY", "inviteCode", "recordInviteClaimed", "SHARE DROP", "shareCanonical"], "Challenge route");
+
+const mobileSharing = await read("mobile/src/sharing.ts");
+requireAll(mobileSharing, ["AsyncStorage", "Share.share", "proofmode.attribution.v1", "maxAttributionAgeMs", "app_open_from_link", "signup_started", "signup_completed", "share_started", "share_completed", "invite_claimed", "canonicalUrl", "receiptAssetUrl"], "Mobile sharing/attribution");
+const mobileSharingApi = await read("mobile/src/api/sharing.ts");
+for (const rpc of ["get_public_post_share_v1", "get_public_receipt_share_v1", "resolve_invite_share_v1"]) {
+  assert(mobileSharingApi.includes(`"${rpc}"`), `Mobile sharing API is missing ${rpc}`);
+}
+for (const route of [
+  "mobile/app/p/[postId].tsx",
+  "mobile/app/r/[receiptId].tsx",
+  "mobile/app/c/[slug].tsx",
+  "mobile/app/j/[journeyId].tsx",
+  "mobile/app/u/[handle].tsx",
+  "mobile/app/invite/[code].tsx",
+]) await read(route);
+const mobileReceiptRoute = await read("mobile/app/r/[receiptId].tsx");
+requireAll(mobileReceiptRoute, ["9:16 STORY", "4:5 PORTRAIT", "1:1 SQUARE", "receiptAssetUrl", "shareCanonical"], "Mobile Receipt route");
+const mobileInviteRoute = await read("mobile/app/invite/[code].tsx");
+requireAll(mobileInviteRoute, ["resolveInviteShare", "captureCanonicalOpen", "recordInviteClaimed", "joinChallenge", "action=accept"], "Mobile invite route");
 
 const mobileCreate = await read("mobile/app/(tabs)/create.tsx");
 requireAll(mobileCreate, ["launchCameraAsync", "launchImageLibraryAsync", "MAX_VIDEO_SECONDS", "loadPendingUpload", "retryPendingUpload", "createResetToken", "resetToken", "discardUploadIntent", "POST {mode.toUpperCase()}"], "Mobile Create");
@@ -356,13 +401,43 @@ assert(!verificationRoute.includes('.from("verifications").upsert'), "Verificati
 const challengeRoute = await read("app/api/challenges/route.ts");
 assert(challengeRoute.includes('plan === "creator" || plan === "black" ? 100000'), "Web challenge capacity does not treat Black as Creator+");
 
+const shareApi = await read("app/api/share/[proofId]/route.ts");
+requireAll(shareApi, ['rpc("get_public_receipt_share_v1"', 'story: { width: 1080, height: 1920', 'portrait: { width: 1080, height: 1350', 'square: { width: 1080, height: 1080'], "Receipt share renderer");
+assert(!shareApi.includes("SUPABASE_SERVICE_ROLE_KEY"), "Receipt share renderer must not bypass public visibility with service role");
+const eventsApi = await read("app/api/events/route.ts");
+for (const eventName of ["app_open_from_link", "signup_started", "signup_completed", "share_started", "share_completed", "invite_claimed"]) {
+  assert(eventsApi.includes(`"${eventName}"`), `Events API is missing ${eventName}`);
+}
+for (const route of [
+  "app/p/[postId]/page.tsx",
+  "app/r/[receiptId]/page.tsx",
+  "app/c/[slug]/page.tsx",
+  "app/j/[journeyId]/page.tsx",
+  "app/u/[handle]/page.tsx",
+  "app/invite/[code]/page.tsx",
+]) await read(route);
+const dropShareLayout = await read("app/c/[slug]/layout.tsx");
+const passportShareLayout = await read("app/u/[handle]/layout.tsx");
+requireAll(dropShareLayout, ["AttributionCapture", "OpenInApp", "ShareButton", "drop_share"], "Drop canonical layout");
+requireAll(passportShareLayout, ["AttributionCapture", "OpenInApp", "ShareButton", "passport_share"], "Passport canonical layout");
+const attributionCapture = await read("components/attribution-capture.tsx");
+requireAll(attributionCapture, ["useSearchParams", 'searchParams.get("src")', 'searchParams.get("ref")'], "Web attribution capture");
+const openInApp = await read("components/open-in-app.tsx");
+requireAll(openInApp, ["useSearchParams", 'searchParams.get("ref")', "appUrl"], "Open-in-app capability preservation");
+
 const vercel = JSON.parse(await read("vercel.json"));
 assert(vercel.crons?.some((cron) => cron.path === "/api/media/cleanup"), "Vercel media cleanup cron is missing");
 
 assert(mobileAppConfig?.scheme === "proofmode", "Missing proofmode app scheme");
 assert(mobileAppConfig?.ios?.associatedDomains?.includes("applinks:proofmode.app"), "Missing iOS associated domain");
-assert(mobileAppConfig?.android?.intentFilters?.some((filter) => filter.action === "VIEW"), "Missing Android app-link intent filter");
+const proofmodeIntent = mobileAppConfig?.android?.intentFilters?.find((filter) => filter.action === "VIEW" && filter.autoVerify === true && filter.data?.some((entry) => entry.scheme === "https" && entry.host === "proofmode.app"));
+assert(proofmodeIntent, "Missing verified Android proofmode.app app-link intent filter");
 assert(mobileAppConfig?.plugins?.some((plugin) => Array.isArray(plugin) && plugin[0] === "expo-image-picker"), "Image picker permissions are not configured");
+const appleAssociation = await read("app/.well-known/apple-app-site-association/route.ts");
+const androidAssociation = await read("app/.well-known/assetlinks.json/route.ts");
+for (const path of ["/p/*", "/r/*", "/c/*", "/j/*", "/u/*", "/invite/*"]) assert(appleAssociation.includes(`"${path}"`), `Apple association missing ${path}`);
+requireAll(appleAssociation, ["APPLE_TEAM_ID", "com.proofmode.app"], "Apple association");
+requireAll(androidAssociation, ["ANDROID_APP_CERT_SHA256", "com.proofmode.app", "delegate_permission/common.handle_all_urls"], "Android association");
 
 const supabaseConfig = await read("supabase/config.toml");
 assert(supabaseConfig.includes('project_id = "proofmode"'), "Supabase local project config is missing");
@@ -376,6 +451,7 @@ for (const testFile of [
   "supabase/tests/database/005_social_actions.test.sql",
   "supabase/tests/database/006_journey_proof_passport.test.sql",
   "supabase/tests/database/007_cross_layer_integration_hardening.test.sql",
+  "supabase/tests/database/008_sharing_attribution.test.sql",
   "supabase/tests/local/003_feed_pagination.test.sql",
 ]) {
   const sql = await read(testFile);
@@ -389,6 +465,8 @@ const journeyTest = await read("supabase/tests/database/006_journey_proof_passpo
 requireAll(journeyTest, ["select plan(50)", "only one active Journey exists", "Reset retry cannot manufacture attempts", "Fail never becomes a proof receipt", "Almost never becomes a proof receipt", "Reset never becomes a proof receipt", "broken streak preserves best historical run", "challenge membership required", "paid/status plan cannot change Proof Score", "blocking severs Journey follows"], "Journey pgTAP");
 const integrationTest = await read("supabase/tests/database/007_cross_layer_integration_hardening.test.sql");
 requireAll(integrationTest, ["select plan(25)", "direct post insert is denied", "forced post-link failure aborts Reset assignment", "failed post link rolls back the new Reset attempt", "Black-owned Drop accepts member six", "anonymous public read RPC access is preserved"], "Integration hardening pgTAP");
+const sharingTest = await read("supabase/tests/database/008_sharing_attribution.test.sql");
+requireAll(sharingTest, ["select plan(17)", "public post share snapshot is available", "unpublished post is hidden", "private Receipt is hidden", "Receipt ID reuses proof ID", "valid invite capability resolves", "public share wrappers are SECURITY INVOKER", "no duplicate Receipt ledger exists", "blocked viewer cannot load public post share", "blocked viewer cannot resolve inviter capability"], "Sharing pgTAP");
 
 const ci = await read(".github/workflows/ci.yml");
 requireAll(ci, ["supabase/setup-cli@v2", "supabase start", "supabase db lint --level error --fail-on error", "supabase test db supabase/tests/database supabase/tests/local"], "CI database gate");
@@ -400,13 +478,15 @@ assert(mobileAuth.includes("signInWithOtp") && !mobileAuth.includes("signInWithP
 assert(mobileDeepLink.includes('authRedirectUrl = "proofmode://auth"') && mobileDeepLink.includes("buildAuthRedirectUrl"), "Magic-link redirect contract regressed");
 assert(mobileDeepLink.includes("auth.setSession") || mobileDeepLink.includes(".auth.setSession"), "Magic-link session completion is missing");
 assert(mobileSession.includes("Linking.getInitialURL") && mobileSession.includes('Linking.addEventListener("url"'), "Auth deep links are incomplete");
+requireAll(mobileAuth, ["recordSignupStarted", "returnTo"], "Mobile attributed auth start");
+requireAll(mobileSession, ["recordSignupCompleted", "completeAuthFromUrl"], "Mobile attributed auth completion");
 
 const mobileEnv = await read("mobile/.env.example");
-for (const key of ["EXPO_PUBLIC_APP_ENV", "EXPO_PUBLIC_API_URL", "EXPO_PUBLIC_SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]) {
+for (const key of ["EXPO_PUBLIC_APP_ENV", "EXPO_PUBLIC_API_URL", "EXPO_PUBLIC_APP_URL", "EXPO_PUBLIC_SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]) {
   assert(mobileEnv.includes(`${key}=`), `Missing ${key} from mobile/.env.example`);
 }
 const rootEnv = await read(".env.example");
-for (const key of ["CLOUDFLARE_STREAM_WEBHOOK_SECRET", "CLOUDFLARE_R2_PUBLIC_BASE_URL", "CRON_SECRET"]) {
+for (const key of ["CLOUDFLARE_STREAM_WEBHOOK_SECRET", "CLOUDFLARE_R2_PUBLIC_BASE_URL", "CRON_SECRET", "APPLE_TEAM_ID", "ANDROID_APP_CERT_SHA256"]) {
   assert(rootEnv.includes(`${key}=`), `Missing ${key} from .env.example`);
 }
 

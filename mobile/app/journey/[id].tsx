@@ -15,44 +15,29 @@ import {
 import { createResetToken } from "@/api/media";
 import { useAuth } from "@/auth/session";
 import { Eyebrow, PrimaryButton, Screen, Surface } from "@/components/ui";
+import { shareCanonical } from "@/sharing";
 import { colors, radius, spacing } from "@/theme";
 
 function JourneyVideo({ uri }: { uri: string }) {
-  const player = useVideoPlayer(uri, (instance) => {
-    instance.loop = true;
-    instance.muted = true;
-  });
+  const player = useVideoPlayer(uri, (instance) => { instance.loop = true; instance.muted = true; });
   return <VideoView player={player} nativeControls style={styles.media} contentFit="cover" />;
 }
 
-function TimelineItem({ item, busy, onVerify }: { item: JourneyTimelineItem; busy: boolean; onVerify: (proofId: string, verdict: boolean) => void }) {
+function TimelineItem({ item, busy, onVerify, onOpenReceipt }: { item: JourneyTimelineItem; busy: boolean; onVerify: (proofId: string, verdict: boolean) => void; onOpenReceipt: (proofId: string) => void }) {
   const date = new Date(item.published_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase();
-  return (
-    <Surface style={styles.timelineCard}>
-      <View style={styles.timelineHead}>
-        <Text style={styles.kind}>{item.kind.toUpperCase()}</Text>
-        <Text style={styles.date}>{date}</Text>
-      </View>
-      {item.media_kind === "image" && item.media_public_url ? <Image source={{ uri: item.media_public_url }} style={styles.media} /> : null}
-      {item.media_kind === "video" && item.media_public_url ? <JourneyVideo uri={item.media_public_url} /> : null}
-      <Text style={styles.caption}>{item.caption?.trim() || "Proof posted."}</Text>
-      {item.proof_id ? (
-        <View style={styles.receiptRow}>
-          <Text style={[styles.receipt, item.proof_verified && styles.verified]}>{item.proof_verified ? "VERIFIED RECEIPT" : "RECEIPT"}</Text>
-          {item.viewer_can_verify ? (
-            <View style={styles.verifyRow}>
-              <Pressable accessibilityRole="button" disabled={busy} onPress={() => onVerify(item.proof_id!, true)}>
-                <Text style={[styles.verifyAction, item.viewer_verdict === true && styles.activeAction]}>VERIFY</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" disabled={busy} onPress={() => onVerify(item.proof_id!, false)}>
-                <Text style={[styles.verifyAction, item.viewer_verdict === false && styles.rejectAction]}>REJECT</Text>
-              </Pressable>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-    </Surface>
-  );
+  return <Surface style={styles.timelineCard}>
+    <View style={styles.timelineHead}><Text style={styles.kind}>{item.kind.toUpperCase()}</Text><Text style={styles.date}>{date}</Text></View>
+    {item.media_kind === "image" && item.media_public_url ? <Image source={{ uri: item.media_public_url }} style={styles.media} /> : null}
+    {item.media_kind === "video" && item.media_public_url ? <JourneyVideo uri={item.media_public_url} /> : null}
+    <Text style={styles.caption}>{item.caption?.trim() || "Proof posted."}</Text>
+    {item.proof_id ? <View style={styles.receiptRow}>
+      <Pressable accessibilityRole="button" onPress={() => onOpenReceipt(item.proof_id!)}><Text style={[styles.receipt, item.proof_verified && styles.verified]}>{item.proof_verified ? "VERIFIED RECEIPT →" : "RECEIPT →"}</Text></Pressable>
+      {item.viewer_can_verify ? <View style={styles.verifyRow}>
+        <Pressable accessibilityRole="button" disabled={busy} onPress={() => onVerify(item.proof_id!, true)}><Text style={[styles.verifyAction, item.viewer_verdict === true && styles.activeAction]}>VERIFY</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={busy} onPress={() => onVerify(item.proof_id!, false)}><Text style={[styles.verifyAction, item.viewer_verdict === false && styles.rejectAction]}>REJECT</Text></Pressable>
+      </View> : null}
+    </View> : null}
+  </Surface>;
 }
 
 export default function JourneyScreen() {
@@ -68,14 +53,9 @@ export default function JourneyScreen() {
     if (!id) return;
     setIsLoading(true);
     setError(null);
-    try {
-      setJourney(await fetchJourneySnapshot(id));
-    } catch {
-      setJourney(null);
-      setError("Could not load this Journey.");
-    } finally {
-      setIsLoading(false);
-    }
+    try { setJourney(await fetchJourneySnapshot(id)); }
+    catch { setJourney(null); setError("Could not load this Journey."); }
+    finally { setIsLoading(false); }
   }, [id]);
 
   useEffect(() => { void load(); }, [load]);
@@ -88,117 +68,67 @@ export default function JourneyScreen() {
 
   async function toggleFollow() {
     if (!journey || busy || requireSignIn()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await setJourneyFollow(journey.id, !journey.viewer_following);
-      await load();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not update Journey follow.");
-    } finally {
-      setBusy(false);
-    }
+    setBusy(true); setError(null);
+    try { await setJourneyFollow(journey.id, !journey.viewer_following); await load(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not update Journey follow."); }
+    finally { setBusy(false); }
   }
 
   async function startSameDrop() {
     if (!journey || busy || requireSignIn()) return;
-    setBusy(true);
-    setError(null);
+    setBusy(true); setError(null);
     try {
       if (!journey.viewer_is_member) await joinChallenge(journey.challenge_slug);
       const nextId = await ensureJourney(journey.challenge_id);
       router.replace(`/journey/${nextId}`);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not start this Drop.");
-    } finally {
-      setBusy(false);
-    }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not start this Drop."); }
+    finally { setBusy(false); }
   }
 
   async function runItBack() {
     if (!journey || busy || !journey.viewer_is_owner || requireSignIn()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const nextId = await resetJourney(journey.challenge_id, createResetToken());
-      router.replace(`/journey/${nextId}`);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not start the next attempt.");
-    } finally {
-      setBusy(false);
-    }
+    setBusy(true); setError(null);
+    try { const nextId = await resetJourney(journey.challenge_id, createResetToken()); router.replace(`/journey/${nextId}`); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not start the next attempt."); }
+    finally { setBusy(false); }
   }
 
   async function verify(proofId: string, verdict: boolean) {
     if (busy || requireSignIn()) return;
-    setBusy(true);
-    setError(null);
+    setBusy(true); setError(null);
+    try { await setProofVerification(proofId, verdict); await load(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not update verification."); }
+    finally { setBusy(false); }
+  }
+
+  async function shareJourney() {
+    if (!journey) return;
     try {
-      await setProofVerification(proofId, verdict);
-      await load();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not update verification.");
-    } finally {
-      setBusy(false);
-    }
+      await shareCanonical({ title: `${journey.display_name} · ${journey.challenge_title}`, text: `Follow ${journey.handle ? `@${journey.handle}` : journey.display_name}'s Journey on ${journey.challenge_title}.`, path: `/j/${journey.id}`, source: "journey_share" });
+    } catch { setError("Could not open share sheet."); }
   }
 
   if (isLoading) return <Screen contentStyle={styles.centered}><ActivityIndicator color={colors.hot} /></Screen>;
-  if (!journey) {
-    return (
-      <Screen contentStyle={styles.centered}>
-        <Eyebrow>JOURNEY NOT FOUND</Eyebrow>
-        <Text style={styles.title}>THIS STORY ISN’T VISIBLE.</Text>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <PrimaryButton onPress={() => router.replace("/(tabs)/explore")}>EXPLORE DROPS</PrimaryButton>
-      </Screen>
-    );
-  }
+  if (!journey) return <Screen contentStyle={styles.centered}><Eyebrow>JOURNEY NOT FOUND</Eyebrow><Text style={styles.title}>THIS STORY ISN’T VISIBLE.</Text>{error ? <Text style={styles.error}>{error}</Text> : null}<PrimaryButton onPress={() => router.replace("/(tabs)/explore")}>EXPLORE DROPS</PrimaryButton></Screen>;
 
   const handle = journey.handle ? `@${journey.handle}` : "";
-  return (
-    <Screen>
-      <Eyebrow>FOLLOW THE STORY, NOT JUST THE ACCOUNT</Eyebrow>
-      <Text style={styles.title}>{journey.challenge_title.toUpperCase()}</Text>
-      <Text style={styles.person}>{journey.display_name.toUpperCase()} {handle ? <Text style={styles.handle}>{handle}</Text> : null}</Text>
+  return <Screen>
+    <Eyebrow>FOLLOW THE STORY, NOT JUST THE ACCOUNT</Eyebrow>
+    <Text style={styles.title}>{journey.challenge_title.toUpperCase()}</Text>
+    <Text style={styles.person}>{journey.display_name.toUpperCase()} {handle ? <Text style={styles.handle}>{handle}</Text> : null}</Text>
 
-      <Surface style={styles.attempt}>
-        <View>
-          <Text style={styles.label}>ATTEMPT</Text>
-          <Text style={styles.attemptValue}>#{journey.attempt_no}</Text>
-        </View>
-        <View style={styles.attemptMeta}>
-          <Text style={styles.status}>{journey.status.toUpperCase()}</Text>
-          <Text style={styles.muted}>STARTED {new Date(journey.started_at).toLocaleDateString()}</Text>
-        </View>
-      </Surface>
+    <Surface style={styles.attempt}><View><Text style={styles.label}>ATTEMPT</Text><Text style={styles.attemptValue}>#{journey.attempt_no}</Text></View><View style={styles.attemptMeta}><Text style={styles.status}>{journey.status.toUpperCase()}</Text><Text style={styles.muted}>STARTED {new Date(journey.started_at).toLocaleDateString()}</Text></View></Surface>
+    <View style={styles.stats}><View style={styles.stat}><Text style={styles.statValue}>{journey.verified_count}</Text><Text style={styles.statLabel}>VERIFIED</Text></View><View style={styles.stat}><Text style={styles.statValue}>{journey.current_streak}</Text><Text style={styles.statLabel}>CURRENT</Text></View><View style={styles.stat}><Text style={styles.statValue}>{journey.best_streak}</Text><Text style={styles.statLabel}>BEST</Text></View></View>
 
-      <View style={styles.stats}>
-        <View style={styles.stat}><Text style={styles.statValue}>{journey.verified_count}</Text><Text style={styles.statLabel}>VERIFIED</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{journey.current_streak}</Text><Text style={styles.statLabel}>CURRENT</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{journey.best_streak}</Text><Text style={styles.statLabel}>BEST</Text></View>
-      </View>
+    <View style={styles.actions}>
+      {journey.viewer_is_owner ? <PrimaryButton onPress={busy ? undefined : () => void runItBack()}>{busy ? "WORKING…" : "RUN IT BACK"}</PrimaryButton> : <><PrimaryButton onPress={busy ? undefined : () => void toggleFollow()}>{journey.viewer_following ? "UNFOLLOW JOURNEY" : "FOLLOW JOURNEY"}</PrimaryButton><PrimaryButton onPress={busy ? undefined : () => void startSameDrop()} style={styles.secondary} textStyle={styles.secondaryText}>{journey.viewer_is_member ? "START FROM DAY 1" : "JOIN SAME DROP"}</PrimaryButton></>}
+      <PrimaryButton onPress={() => void shareJourney()} style={styles.secondary} textStyle={styles.secondaryText}>SHARE JOURNEY</PrimaryButton>
+    </View>
+    {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <View style={styles.actions}>
-        {journey.viewer_is_owner ? (
-          <PrimaryButton onPress={busy ? undefined : () => void runItBack()}>{busy ? "WORKING…" : "RUN IT BACK"}</PrimaryButton>
-        ) : (
-          <>
-            <PrimaryButton onPress={busy ? undefined : () => void toggleFollow()}>{journey.viewer_following ? "UNFOLLOW JOURNEY" : "FOLLOW JOURNEY"}</PrimaryButton>
-            <PrimaryButton onPress={busy ? undefined : () => void startSameDrop()} style={styles.secondary} textStyle={styles.secondaryText}>
-              {journey.viewer_is_member ? "START FROM DAY 1" : "JOIN SAME DROP"}
-            </PrimaryButton>
-          </>
-        )}
-      </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <Text style={styles.sectionTitle}>THE JOURNEY</Text>
-      {journey.timeline.length === 0 ? <Text style={styles.muted}>No published chapters yet.</Text> : journey.timeline.map((item) => (
-        <TimelineItem key={item.post_id} item={item} busy={busy} onVerify={(proofId, verdict) => void verify(proofId, verdict)} />
-      ))}
-    </Screen>
-  );
+    <Text style={styles.sectionTitle}>THE JOURNEY</Text>
+    {journey.timeline.length === 0 ? <Text style={styles.muted}>No published chapters yet.</Text> : journey.timeline.map((item) => <TimelineItem key={item.post_id} item={item} busy={busy} onVerify={(proofId, verdict) => void verify(proofId, verdict)} onOpenReceipt={(proofId) => router.push(`/r/${proofId}`)} />)}
+  </Screen>;
 }
 
 const styles = StyleSheet.create({

@@ -5,6 +5,7 @@ import { AppState } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import { completeAuthFromUrl } from "@/auth/deep-link";
 import { supabase } from "@/lib/supabase";
+import { recordSignupCompleted } from "@/sharing";
 
 type AuthState = Readonly<{
   session: Session | null;
@@ -33,7 +34,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const handleAuthUrl = async (url: string | null) => {
       if (!url) return;
       try {
-        await completeAuthFromUrl(url);
+        const completed = await completeAuthFromUrl(url);
+        if (completed) await recordSignupCompleted();
         if (active) setAuthError(null);
       } catch (cause) {
         if (active) setAuthError(cause instanceof Error ? cause.message : "Could not complete sign-in.");

@@ -7,6 +7,7 @@ import { useAuth } from "@/auth/session";
 import { PostSocialModal } from "@/components/post-social-modal";
 import type { FeedPost } from "@/domain";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { shareCanonical } from "@/sharing";
 import { colors, radius, spacing } from "@/theme";
 
 function compactCount(count: number) {
@@ -88,6 +89,19 @@ export function FeedCard({ item, height, active = false, onBlocked }: FeedCardPr
     if (item.challengeSlug) router.push(`/challenge/${item.challengeSlug}`);
   }
 
+  async function sharePost() {
+    try {
+      await shareCanonical({
+        title: item.challenge,
+        text: item.caption,
+        path: `/p/${item.id}`,
+        source: "feed_share",
+      });
+    } catch {
+      Alert.alert("Could not share post", "Try again in a moment.");
+    }
+  }
+
   const hasPrimary = Boolean(item.journeyId || item.challengeSlug);
 
   return (
@@ -123,7 +137,9 @@ export function FeedCard({ item, height, active = false, onBlocked }: FeedCardPr
             <Pressable accessibilityRole="button" onPress={openSocial}>
               <Text style={styles.reactionText}>COMMENTS · {compactCount(commentCount)}</Text>
             </Pressable>
-            <Text style={styles.reactionText}>↗ SHARE</Text>
+            <Pressable accessibilityRole="button" onPress={() => void sharePost()}>
+              <Text style={styles.reactionText}>↗ SHARE</Text>
+            </Pressable>
           </View>
           <Pressable accessibilityRole="button" disabled={!hasPrimary} onPress={openPrimary} style={[styles.cta, !hasPrimary && styles.ctaDisabled]}>
             <Text style={styles.ctaText}>{item.action} →</Text>
@@ -150,112 +166,25 @@ export function FeedCard({ item, height, active = false, onBlocked }: FeedCardPr
 }
 
 const styles = StyleSheet.create({
-  card: {
-    marginHorizontal: 10,
-    borderRadius: 28,
-    overflow: "hidden",
-    backgroundColor: colors.panel,
-    borderColor: colors.line,
-    borderWidth: 1,
-  },
-  visual: {
-    flex: 1,
-    minHeight: 360,
-    backgroundColor: colors.panel2,
-    padding: 20,
-    justifyContent: "flex-end",
-    borderBottomWidth: 1,
-    overflow: "hidden",
-  },
-  scrim: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: "rgba(0,0,0,0.24)",
-  },
-  top: {
-    position: "absolute",
-    top: spacing.lg,
-    left: spacing.lg,
-    right: spacing.lg,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  kind: {
-    borderWidth: 1,
-    borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    backgroundColor: "rgba(9,10,12,0.72)",
-  },
-  day: {
-    color: colors.text,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1,
-    backgroundColor: "rgba(9,10,12,0.72)",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-  },
-  value: {
-    color: colors.text,
-    fontSize: 76,
-    fontWeight: "900",
-    letterSpacing: -5,
-  },
-  challenge: {
-    color: colors.text,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    textShadowColor: "rgba(0,0,0,0.8)",
-    textShadowRadius: 8,
-  },
-  copy: {
-    padding: spacing.lg,
-  },
+  card: { marginHorizontal: 10, borderRadius: 28, overflow: "hidden", backgroundColor: colors.panel, borderColor: colors.line, borderWidth: 1 },
+  visual: { flex: 1, minHeight: 360, backgroundColor: colors.panel2, padding: 20, justifyContent: "flex-end", borderBottomWidth: 1, overflow: "hidden" },
+  scrim: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,0.24)" },
+  top: { position: "absolute", top: spacing.lg, left: spacing.lg, right: spacing.lg, flexDirection: "row", justifyContent: "space-between" },
+  kind: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 7, fontSize: 10, fontWeight: "900", letterSpacing: 1.2, backgroundColor: "rgba(9,10,12,0.72)" },
+  day: { color: colors.text, fontSize: 11, fontWeight: "900", letterSpacing: 1, backgroundColor: "rgba(9,10,12,0.72)", paddingHorizontal: 8, paddingVertical: 5, borderRadius: radius.pill },
+  value: { color: colors.text, fontSize: 76, fontWeight: "900", letterSpacing: -5 },
+  challenge: { color: colors.text, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1, textShadowColor: "rgba(0,0,0,0.8)", textShadowRadius: 8 },
+  copy: { padding: spacing.lg },
   userRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
-  user: {
-    color: colors.text,
-    fontWeight: "900",
-    flex: 1,
-  },
-  handle: {
-    color: colors.muted,
-    fontWeight: "700",
-  },
+  user: { color: colors.text, fontWeight: "900", flex: 1 },
+  handle: { color: colors.muted, fontWeight: "700" },
   follow: { color: colors.hot, fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
   following: { color: colors.muted },
-  caption: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: "700",
-    lineHeight: 24,
-    marginTop: 10,
-  },
-  reactions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.lg,
-    marginVertical: 14,
-  },
+  caption: { color: colors.text, fontSize: 17, fontWeight: "700", lineHeight: 24, marginTop: 10 },
+  reactions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg, marginVertical: 14 },
   reactionText: { color: colors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
   selectedReaction: { color: colors.hot, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
-  cta: {
-    backgroundColor: colors.hot,
-    padding: 14,
-    borderRadius: radius.pill,
-    alignItems: "center",
-  },
+  cta: { backgroundColor: colors.hot, padding: 14, borderRadius: radius.pill, alignItems: "center" },
   ctaDisabled: { opacity: 0.45 },
-  ctaText: {
-    color: colors.bg,
-    fontWeight: "900",
-  },
+  ctaText: { color: colors.bg, fontWeight: "900" },
 });

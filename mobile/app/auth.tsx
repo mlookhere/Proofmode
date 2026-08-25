@@ -5,6 +5,7 @@ import { buildAuthRedirectUrl } from "@/auth/deep-link";
 import { useAuth } from "@/auth/session";
 import { Eyebrow, PrimaryButton, Screen } from "@/components/ui";
 import { isSupabaseConfigured, requireSupabase } from "@/lib/supabase";
+import { recordSignupStarted } from "@/sharing";
 import { colors, radius, spacing } from "@/theme";
 
 export default function AuthScreen() {
@@ -18,7 +19,7 @@ export default function AuthScreen() {
 
   useEffect(() => {
     if (session) router.replace(returnTo || "/(tabs)/you");
-  }, [router, session]);
+  }, [returnTo, router, session]);
 
   async function sendMagicLink() {
     const normalizedEmail = email.trim().toLowerCase();
@@ -33,6 +34,7 @@ export default function AuthScreen() {
     clearAuthError();
 
     try {
+      await recordSignupStarted();
       const { error: signInError } = await requireSupabase().auth.signInWithOtp({
         email: normalizedEmail,
         options: { emailRedirectTo: buildAuthRedirectUrl(returnTo) },

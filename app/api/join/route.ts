@@ -1,4 +1,6 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { attributionCookieName, decodeAttribution } from "@/lib/attribution";
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -20,6 +22,23 @@ export async function POST(request: Request) {
     if (message.includes("invite required")) return NextResponse.redirect(new URL(`/c/${slug}?error=invite_required`, request.url), 303);
     return NextResponse.json({ error: joined.error.message }, { status: 400 });
   }
-  await supabase.from("analytics_events").insert({ user_id: user.id, event_name: inviteCode ? "invite_accepted" : "challenge_joined_from_share", source: "challenge_page", properties: { challenge_id: joined.data, invite_code: inviteCode } });
+
+  const store = await cookies();
+  const attribution = decodeAttribution(store.get(attributionCookieName)?.value);
+  await supabase.from("analytics_events").insert({
+    user_id: user.id,
+    event_name: inviteCode ? "invite_accepted" : "challenge_joined_from_share",
+    source: attribution?.source || "challenge_page",
+    properties: { challenge_id: joined.data, invite_code: inviteCode, path: attribution?.path ?? nextPath },
+  });
+  if (inviteCode) {
+    await supabase.from("analytics_events").insert({
+      user_id: user.id,
+      event_name: "invite_claimed",
+      source: attribution?.source || "invite_link",
+      properties: { challenge_id: joined.data, invite_code: inviteCode, path: attribution?.path ?? nextPath },
+    });
+  }
+
   return NextResponse.redirect(new URL(`/c/${slug}?joined=1`, request.url), 303);
 }

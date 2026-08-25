@@ -10,6 +10,7 @@ function parseAppEnvironment(value: string | undefined): AppEnvironment {
 export const publicEnv = Object.freeze({
   appEnvironment: parseAppEnvironment(process.env.EXPO_PUBLIC_APP_ENV),
   apiUrl: process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, ""),
+  appUrl: (process.env.EXPO_PUBLIC_APP_URL || "https://proofmode.app").replace(/\/$/, ""),
   supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
   supabasePublishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 });
