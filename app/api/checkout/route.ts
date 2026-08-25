@@ -7,10 +7,17 @@ const plans = {
 } as const;
 
 function purchaseUrl(base: string, userId: string, email: string) {
-  const url = new URL(base);
-  url.pathname = `${url.pathname.replace(/\/$/, "")}/${userId}`;
-  url.searchParams.set("email", email);
-  return url;
+  try {
+    const url = new URL(base);
+    if (url.protocol !== "https:" || url.hostname !== "pay.rev.cat") return null;
+    const basePath = url.pathname.replace(/\/+$/, "");
+    if (!basePath || basePath === "/") return null;
+    url.pathname = `${basePath}/${encodeURIComponent(userId)}`;
+    url.searchParams.set("email", email);
+    return url;
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -41,6 +48,8 @@ export async function POST(request: Request) {
 
   const configuredUrl = process.env[plans[plan as keyof typeof plans]]?.trim();
   if (!configuredUrl) return NextResponse.json({ error: `RevenueCat purchase link is not configured for ${plan}` }, { status: 503 });
+  const checkoutUrl = purchaseUrl(configuredUrl, user.id, user.email);
+  if (!checkoutUrl) return NextResponse.json({ error: `RevenueCat purchase link is invalid for ${plan}` }, { status: 503 });
 
   await supabase.from("analytics_events").insert({
     user_id: user.id,
@@ -49,5 +58,5 @@ export async function POST(request: Request) {
     properties: { plan },
   });
 
-  return NextResponse.redirect(purchaseUrl(configuredUrl, user.id, user.email), 303);
+  return NextResponse.redirect(checkoutUrl, 303);
 }
