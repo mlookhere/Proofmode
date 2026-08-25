@@ -5,6 +5,7 @@ import { AppState } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import { completeAuthFromUrl } from "@/auth/deep-link";
 import { supabase } from "@/lib/supabase";
+import { disableCurrentDevicePush } from "@/notifications/device";
 import { recordSignupCompleted } from "@/sharing";
 
 type AuthState = Readonly<{
@@ -78,7 +79,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     authError,
     clearAuthError: () => setAuthError(null),
     signOut: async () => {
-      if (supabase) await supabase.auth.signOut();
+      if (!supabase) return;
+      await disableCurrentDevicePush().catch(() => undefined);
+      await supabase.auth.signOut();
     },
   }), [session, isLoading, authError]);
 
