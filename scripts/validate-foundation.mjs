@@ -33,6 +33,7 @@ assert(JSON.stringify(migrations) === JSON.stringify([
   "016_cross_layer_integration_hardening.sql",
   "017_sharing_attribution.sql",
   "018_notifications_mvp.sql",
+  "019_notifications_hardening.sql",
 ]), `Unexpected migration set: ${migrations.join(", ")}`);
 
 const templatesSql = await read("supabase/migrations/004_template_library.sql");
@@ -284,7 +285,6 @@ requireAll(notificationsSql, [
   "security definer",
   "kind = 'push'",
   "recap = false",
-  "DeviceNotRegistered",
   "for update skip locked",
   "follows_notify_insert",
   "post_reactions_notify_insert",
@@ -293,6 +293,20 @@ requireAll(notificationsSql, [
   "posts_notify_journey_update",
 ], "Notifications migration");
 assert(!/create\s+table(?:\s+if\s+not\s+exists)?\s+public\.notifications\b/i.test(notificationsSql), "Notifications must reuse the outbox instead of creating a parallel event ledger");
+
+const notificationsHardeningSql = await read("supabase/migrations/019_notifications_hardening.sql");
+requireAll(notificationsHardeningSql, [
+  "private.notification_timezone_v1",
+  "private.notification_route_visible_v1",
+  "push token already registered",
+  "public.push_tokens.user_id = actor_id",
+  "public.push_tokens.enabled = false",
+  "'follow:' || new.follower_id::text || ':' || new.followed_id::text",
+  "'reaction:' || new.post_id::text || ':' || new.user_id::text",
+  "candidate.local_date::text",
+  "'route_hidden'",
+  "private.notification_route_visible_v1(recipient, target_route)",
+], "Notifications hardening migration");
 
 const mobilePackage = JSON.parse(await read("mobile/package.json"));
 const mobileLock = JSON.parse(await read("mobile/package-lock.json"));
@@ -504,6 +518,7 @@ for (const testFile of [
   "supabase/tests/database/007_cross_layer_integration_hardening.test.sql",
   "supabase/tests/database/008_sharing_attribution.test.sql",
   "supabase/tests/database/009_notifications_mvp.test.sql",
+  "supabase/tests/database/010_notifications_hardening.test.sql",
   "supabase/tests/local/003_feed_pagination.test.sql",
 ]) {
   const sql = await read(testFile);
@@ -521,6 +536,17 @@ const sharingTest = await read("supabase/tests/database/008_sharing_attribution.
 requireAll(sharingTest, ["select plan(17)", "public post share snapshot is available", "unpublished post is hidden", "private Receipt is hidden", "Receipt ID reuses proof ID", "valid invite capability resolves", "public share wrappers are SECURITY INVOKER", "no duplicate Receipt ledger exists", "blocked viewer cannot load public post share", "blocked viewer cannot resolve inviter capability"], "Sharing pgTAP");
 const notificationsTest = await read("supabase/tests/database/009_notifications_mvp.test.sql");
 requireAll(notificationsTest, ["select plan(34)", "authenticated cannot directly read push tokens", "notification public RPCs are SECURITY INVOKER", "quiet hours defer delivery", "new follow enqueues one social push", "blocked actor notifications are suppressed", "duplicate event creates only one outbox row", "hourly anti-spam budget blocks a fifth push", "invite acceptance enqueues", "published Journey chapter notifies", "service claim path claims due push jobs", "delivery context rechecks preferences", "disabled device token is persisted"], "Notifications pgTAP");
+const notificationsHardeningTest = await read("supabase/tests/database/010_notifications_hardening.test.sql");
+requireAll(notificationsHardeningTest, [
+  "select plan(15)",
+  "another account cannot steal an enabled Expo token",
+  "a disabled device token may move to a different signed-in account",
+  "unfollow and refollow cannot manufacture another push",
+  "reaction changes reuse one stable post-user push event",
+  "delivery is suppressed when queued content becomes hidden",
+  "streak-risk dedupe uses the recipient-local calendar date",
+  "UTC date cannot create a false streak-risk event",
+], "Notifications hardening pgTAP");
 
 const ci = await read(".github/workflows/ci.yml");
 requireAll(ci, ["supabase/setup-cli@v2", "supabase start", "supabase db lint --level error --fail-on error", "supabase test db supabase/tests/database supabase/tests/local"], "CI database gate");
