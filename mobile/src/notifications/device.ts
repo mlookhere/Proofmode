@@ -105,10 +105,19 @@ export async function requestPushPermissionAndRegister(userId: string): Promise<
 
 export async function disableCurrentDevicePush() {
   const current = await readStoredRegistration();
-  if (!current) return false;
+  let disabledOnServer = false;
   try {
-    return await disablePushToken(current.token);
+    if (current) disabledOnServer = await disablePushToken(current.token);
+  } catch {
+    // Native unregister below prevents a signed-out device from receiving the stale token.
+  }
+
+  try {
+    if (Platform.OS === "ios" || Platform.OS === "android") {
+      await Notifications.unregisterForNotificationsAsync();
+    }
   } finally {
     await AsyncStorage.removeItem(registrationKey);
   }
+  return disabledOnServer;
 }
