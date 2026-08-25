@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 export const appEnvironments = ["local", "staging", "production"] as const;
 export type AppEnvironment = (typeof appEnvironments)[number];
 
@@ -13,6 +15,8 @@ export const publicEnv = Object.freeze({
   appUrl: (process.env.EXPO_PUBLIC_APP_URL || "https://proofmode.app").replace(/\/$/, ""),
   supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
   supabasePublishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  revenueCatIosApiKey: process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY,
+  revenueCatAndroidApiKey: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY,
 });
 
 export const hasSupabaseEnv = Boolean(publicEnv.supabaseUrl && publicEnv.supabasePublishableKey);
@@ -31,4 +35,10 @@ export function requireSupabaseEnv() {
 export function requireApiUrl() {
   if (!publicEnv.apiUrl) throw new Error("Missing EXPO_PUBLIC_API_URL");
   return publicEnv.apiUrl;
+}
+
+export function revenueCatApiKey() {
+  if (Platform.OS === "ios") return publicEnv.revenueCatIosApiKey;
+  if (Platform.OS === "android") return publicEnv.revenueCatAndroidApiKey;
+  return undefined;
 }

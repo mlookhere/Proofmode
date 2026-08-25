@@ -1,69 +1,62 @@
-import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/server";
 
 const plans = {
-  pro: { priceId: () => process.env.STRIPE_PROOF_PLUS_PRICE_ID || process.env.STRIPE_PRO_PRICE_ID },
-  creator: { priceId: () => process.env.STRIPE_CREATOR_PRICE_ID }
+  proof_plus: "REVENUECAT_PROOF_PLUS_PURCHASE_URL",
+  creator: "REVENUECAT_CREATOR_PURCHASE_URL",
 } as const;
 
-function integrationIdentifier() {
-  const suffix = Array.from(randomBytes(8), (byte) => String.fromCharCode(97 + (byte % 26))).join("");
-  return `proofmode_${suffix}`;
+function purchaseUrl(base: string, userId: string, email: string) {
+  try {
+    const url = new URL(base);
+    if (url.protocol !== "https:" || url.hostname !== "pay.rev.cat") return null;
+    const basePath = url.pathname.replace(/\/+$/, "");
+    if (!basePath || basePath === "/") return null;
+    url.pathname = `${basePath}/${encodeURIComponent(userId)}`;
+    url.searchParams.set("email", email);
+    return url;
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
   if (!hasSupabaseEnv()) return NextResponse.redirect(new URL("/login", request.url), 303);
-  const secret = process.env.STRIPE_SECRET_KEY;
-  if (!secret) return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
 
   const form = await request.formData();
-  const plan = String(form.get("plan") || "") as keyof typeof plans;
+  const rawPlan = String(form.get("plan") || "");
+  const plan = rawPlan === "pro" ? "proof_plus" : rawPlan;
   if (!(plan in plans)) return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
-  const priceId = plans[plan].priceId();
-  if (!priceId) return NextResponse.json({ error: `Missing Stripe price for ${plan}` }, { status: 503 });
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user?.email) return NextResponse.redirect(new URL("/login", request.url), 303);
+  if (!user?.email) return NextResponse.redirect(new URL("/login?next=/pricing", request.url), 303);
 
-  // Never create a second live subscription for the same ProofMode account. Existing
-  // subscribers manage upgrades, payment methods, and cancellation through Customer Portal.
-  const existingSubscription = await supabase
+  // Existing direct-Stripe subscribers keep their original management path instead of
+  // accidentally creating a second subscription during the RevenueCat transition.
+  const legacySubscription = await supabase
     .from("subscriptions")
-    .select("stripe_subscription_id,status")
+    .select("id")
     .eq("user_id", user.id)
+    .eq("provider", "stripe")
     .in("status", ["active", "trialing", "past_due", "unpaid", "paused", "incomplete"])
     .limit(1)
     .maybeSingle();
-  if (existingSubscription.data) {
+  if (legacySubscription.data) {
     return NextResponse.redirect(new URL("/dashboard?billing=existing", request.url), 303);
   }
 
-  await supabase.from("analytics_events").insert({ user_id: user.id, event_name: "checkout_start", source: "pricing", properties: { plan } });
+  const configuredUrl = process.env[plans[plan as keyof typeof plans]]?.trim();
+  if (!configuredUrl) return NextResponse.json({ error: `RevenueCat purchase link is not configured for ${plan}` }, { status: 503 });
+  const checkoutUrl = purchaseUrl(configuredUrl, user.id, user.email);
+  if (!checkoutUrl) return NextResponse.json({ error: `RevenueCat purchase link is invalid for ${plan}` }, { status: 503 });
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-  const body = new URLSearchParams({
-    mode: "subscription",
-    success_url: `${origin}/dashboard?upgraded=1`,
-    cancel_url: `${origin}/pricing?canceled=1`,
-    customer_email: user.email,
-    client_reference_id: user.id,
-    "line_items[0][price]": priceId,
-    "line_items[0][quantity]": "1",
-    "subscription_data[metadata][user_id]": user.id,
-    "subscription_data[metadata][plan]": plan,
-    allow_promotion_codes: "true",
-    integration_identifier: integrationIdentifier()
+  await supabase.from("analytics_events").insert({
+    user_id: user.id,
+    event_name: "purchase_started",
+    source: "web_pricing",
+    properties: { plan },
   });
 
-  const stripeResponse = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/x-www-form-urlencoded", "Stripe-Version": "2026-06-24.dahlia" },
-    body,
-    cache: "no-store"
-  });
-  const session = await stripeResponse.json() as { url?: string; error?: { message?: string } };
-  if (!stripeResponse.ok || !session.url) return NextResponse.json({ error: session.error?.message || "Unable to start checkout" }, { status: 502 });
-  return NextResponse.redirect(session.url, 303);
+  return NextResponse.redirect(checkoutUrl, 303);
 }

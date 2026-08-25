@@ -1,4 +1,4 @@
-function CheckoutButton({ plan, label, primary = false }: { plan: "pro" | "creator"; label: string; primary?: boolean }) {
+function CheckoutButton({ plan, label, primary = false }: { plan: "proof_plus" | "creator"; label: string; primary?: boolean }) {
   return <form action="/api/checkout" method="post"><input type="hidden" name="plan" value={plan} /><button className={`btn ${primary ? "btn-primary" : ""}`} type="submit">{label}</button></form>;
 }
 
@@ -17,7 +17,7 @@ export default function PricingPage() {
         <div className="price-card featured">
           <span className="tag">PROOF+ · MAKE IT YOURS</span><div className="price">$9.99 <span>/ month target</span></div>
           <ul><li>Premium Passport + receipt identity</li><li>Deeper history and personal analytics</li><li>Private social controls and more Crews</li><li>Seasonal cosmetic drops</li><li>Early feature access</li></ul>
-          <CheckoutButton plan="pro" label="Get Proof+" primary />
+          <CheckoutButton plan="proof_plus" label="Get Proof+" primary />
         </div>
         <div className="price-card">
           <span className="tag">CREATOR · TURN REACH INTO PARTICIPATION</span><div className="price">$39 <span>/ month target</span></div>

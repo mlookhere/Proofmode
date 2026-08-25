@@ -4,6 +4,7 @@ import * as Linking from "expo-linking";
 import { AppState } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import { completeAuthFromUrl } from "@/auth/deep-link";
+import { syncRevenueCatIdentity } from "@/billing/revenuecat";
 import { supabase } from "@/lib/supabase";
 import { disableCurrentDevicePush } from "@/notifications/device";
 import { recordSignupCompleted } from "@/sharing";
@@ -73,6 +74,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  useEffect(() => {
+    syncRevenueCatIdentity(session?.user.id ?? null).catch(() => undefined);
+  }, [session?.user.id]);
+
   const value = useMemo<AuthState>(() => ({
     session,
     isLoading,
@@ -81,6 +86,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     signOut: async () => {
       if (!supabase) return;
       await disableCurrentDevicePush().catch(() => undefined);
+      await syncRevenueCatIdentity(null).catch(() => undefined);
       await supabase.auth.signOut();
     },
   }), [session, isLoading, authError]);
