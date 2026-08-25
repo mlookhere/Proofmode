@@ -96,7 +96,7 @@ insert into public.posts (
   'public',
   'published',
   'approved',
-  now() - interval '10 days'
+  date_trunc('day', now()) - interval '10 days' + interval '12 hours'
 );
 
 select is(
@@ -122,7 +122,7 @@ insert into public.posts (
   'public',
   'published',
   'approved',
-  now() - interval '10 days' + interval '1 hour'
+  date_trunc('day', now()) - interval '10 days' + interval '13 hours'
 );
 
 select is(
