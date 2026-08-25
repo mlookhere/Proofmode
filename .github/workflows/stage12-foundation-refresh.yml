@@ -1,0 +1,44 @@
+name: Stage 12 foundation refresh
+
+on:
+  push:
+    branches:
+      - work/33-revenuecat-monetization
+    paths:
+      - .github/workflows/stage12-foundation-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-foundation:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: work/33-revenuecat-monetization
+      - name: Extend migration ledger
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/validate-foundation.mjs')
+          text = path.read_text()
+          old = '  "019_notifications_hardening.sql",\n])'
+          new = '  "019_notifications_hardening.sql",\n  "020_revenuecat_monetization.sql",\n])'
+          if new in text:
+              raise SystemExit(0)
+          if old not in text:
+              raise SystemExit('Foundation migration anchor not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Commit validator update
+        run: |
+          if git diff --quiet -- scripts/validate-foundation.mjs; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/validate-foundation.mjs
+          git commit -m "Recognize RevenueCat migration in Foundation"
+          git push origin HEAD:work/33-revenuecat-monetization
