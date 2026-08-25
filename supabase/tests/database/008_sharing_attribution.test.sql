@@ -45,7 +45,7 @@ reset role;
 select is((select count(*)::int from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname=any(array['get_public_post_share_v1','get_public_receipt_share_v1','resolve_invite_share_v1']) and not p.prosecdef),3,'public share wrappers are SECURITY INVOKER');
 select is((select count(*)::int from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='private' and p.proname=any(array['get_public_post_share_v1','get_public_receipt_share_v1','resolve_invite_share_v1']) and p.prosecdef),3,'privileged share implementations are private');
 select ok(has_function_privilege('anon','public.get_public_post_share_v1(uuid)','EXECUTE') and has_function_privilege('anon','public.get_public_receipt_share_v1(uuid)','EXECUTE') and has_function_privilege('anon','public.resolve_invite_share_v1(text)','EXECUTE'),'anonymous share reads retain explicit execute grants');
-select is(has_table('public','receipts'),false,'no duplicate Receipt ledger exists');
+select is((select count(*)::int from information_schema.tables where table_schema='public' and table_name='receipts'),0,'no duplicate Receipt ledger exists');
 
 insert into public.blocks (blocker_id,blocked_id) values ('17000000-0000-0000-0000-000000000002','17000000-0000-0000-0000-000000000001');
 set local role authenticated;
