@@ -1,8 +1,8 @@
 name: Stage11 Mobile Lockfile
 
 on:
-  push:
-    branches: [work/31-notifications]
+  pull_request:
+    branches: [dev]
 
 permissions:
   contents: read
