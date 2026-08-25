@@ -1,0 +1,39 @@
+name: Stage 12 mobile lock refresh
+
+on:
+  push:
+    branches:
+      - work/33-revenuecat-monetization
+    paths:
+      - mobile/package.json
+      - .github/workflows/stage12-lock-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lock:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: work/33-revenuecat-monetization
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Generate npm lockfile
+        working-directory: mobile
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Commit lockfile
+        run: |
+          if git diff --quiet -- mobile/package-lock.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile/package-lock.json
+          git commit -m "Lock RevenueCat mobile dependency"
+          git push origin HEAD:work/33-revenuecat-monetization
