@@ -32,6 +32,8 @@ assert(JSON.stringify(migrations) === JSON.stringify([
   "015_journey_proof_passport.sql",
   "016_cross_layer_integration_hardening.sql",
   "017_sharing_attribution.sql",
+  "018_notifications_mvp.sql",
+  "019_notifications_hardening.sql",
 ]), `Unexpected migration set: ${migrations.join(", ")}`);
 
 const templatesSql = await read("supabase/migrations/004_template_library.sql");
@@ -259,6 +261,53 @@ requireAll(sharingSql, [
 ], "Sharing/attribution migration");
 assert(!/create\s+table(?:\s+if\s+not\s+exists)?\s+public\.receipts/i.test(sharingSql), "Sharing migration must reuse proofs instead of creating a Receipt ledger");
 
+const notificationsSql = await read("supabase/migrations/018_notifications_mvp.sql");
+requireAll(notificationsSql, [
+  "create table if not exists public.push_deliveries",
+  "alter table public.push_deliveries enable row level security",
+  "revoke all on table public.push_tokens from anon, authenticated",
+  "revoke all on table public.notification_preferences from anon, authenticated",
+  "revoke all on table public.push_deliveries from anon, authenticated",
+  "private.notification_route_allowed_v1",
+  "private.notification_budget_allows_v1",
+  "private.notification_run_after_v1",
+  "private.enqueue_push_v1",
+  "private.register_push_token_v1",
+  "private.set_notification_preferences_v1",
+  "private.enqueue_due_notification_stakes_v1",
+  "private.claim_push_jobs_v1",
+  "private.get_push_job_delivery_v1",
+  "public.register_push_token_v1",
+  "public.get_notification_preferences_v1",
+  "public.set_notification_preferences_v1",
+  "public.claim_push_jobs_v1",
+  "security invoker",
+  "security definer",
+  "kind = 'push'",
+  "recap = false",
+  "for update skip locked",
+  "follows_notify_insert",
+  "post_reactions_notify_insert",
+  "comments_notify_insert",
+  "invite_claims_notify_insert",
+  "posts_notify_journey_update",
+], "Notifications migration");
+assert(!/create\s+table(?:\s+if\s+not\s+exists)?\s+public\.notifications\b/i.test(notificationsSql), "Notifications must reuse the outbox instead of creating a parallel event ledger");
+
+const notificationsHardeningSql = await read("supabase/migrations/019_notifications_hardening.sql");
+requireAll(notificationsHardeningSql, [
+  "private.notification_timezone_v1",
+  "private.notification_route_visible_v1",
+  "push token already registered",
+  "public.push_tokens.user_id = actor_id",
+  "public.push_tokens.enabled = false",
+  "'follow:' || new.follower_id::text || ':' || new.followed_id::text",
+  "'reaction:' || new.post_id::text || ':' || new.user_id::text",
+  "candidate.local_date::text",
+  "'route_hidden'",
+  "private.notification_route_visible_v1(recipient, target_route)",
+], "Notifications hardening migration");
+
 const mobilePackage = JSON.parse(await read("mobile/package.json"));
 const mobileLock = JSON.parse(await read("mobile/package-lock.json"));
 const mobileAppConfig = JSON.parse(await read("mobile/app.json")).expo;
@@ -425,6 +474,22 @@ requireAll(attributionCapture, ["useSearchParams", 'searchParams.get("src")', 's
 const openInApp = await read("components/open-in-app.tsx");
 requireAll(openInApp, ["useSearchParams", 'searchParams.get("ref")', "appUrl"], "Open-in-app capability preservation");
 
+const notificationWorker = await read("lib/notifications/server.ts");
+requireAll(notificationWorker, [
+  "https://exp.host/--/api/v2/push/send",
+  "https://exp.host/--/api/v2/push/getReceipts",
+  "EXPO_ACCESS_TOKEN",
+  'rpc("enqueue_due_notification_stakes_v1"',
+  'rpc("claim_push_jobs_v1"',
+  'rpc("get_push_job_delivery_v1"',
+  'from("push_deliveries")',
+  "DeviceNotRegistered",
+  "MessageRateExceeded",
+  "FINAL_DELIVERY_STATES",
+], "Notification worker");
+const notificationProcessRoute = await read("app/api/notifications/process/route.ts");
+requireAll(notificationProcessRoute, ["CRON_SECRET", "processPushNotifications", "Unauthorized"], "Notification processing route");
+
 const vercel = JSON.parse(await read("vercel.json"));
 assert(vercel.crons?.some((cron) => cron.path === "/api/media/cleanup"), "Vercel media cleanup cron is missing");
 
@@ -452,6 +517,8 @@ for (const testFile of [
   "supabase/tests/database/006_journey_proof_passport.test.sql",
   "supabase/tests/database/007_cross_layer_integration_hardening.test.sql",
   "supabase/tests/database/008_sharing_attribution.test.sql",
+  "supabase/tests/database/009_notifications_mvp.test.sql",
+  "supabase/tests/database/010_notifications_hardening.test.sql",
   "supabase/tests/local/003_feed_pagination.test.sql",
 ]) {
   const sql = await read(testFile);
@@ -467,6 +534,19 @@ const integrationTest = await read("supabase/tests/database/007_cross_layer_inte
 requireAll(integrationTest, ["select plan(25)", "direct post insert is denied", "forced post-link failure aborts Reset assignment", "failed post link rolls back the new Reset attempt", "Black-owned Drop accepts member six", "anonymous public read RPC access is preserved"], "Integration hardening pgTAP");
 const sharingTest = await read("supabase/tests/database/008_sharing_attribution.test.sql");
 requireAll(sharingTest, ["select plan(17)", "public post share snapshot is available", "unpublished post is hidden", "private Receipt is hidden", "Receipt ID reuses proof ID", "valid invite capability resolves", "public share wrappers are SECURITY INVOKER", "no duplicate Receipt ledger exists", "blocked viewer cannot load public post share", "blocked viewer cannot resolve inviter capability"], "Sharing pgTAP");
+const notificationsTest = await read("supabase/tests/database/009_notifications_mvp.test.sql");
+requireAll(notificationsTest, ["select plan(34)", "authenticated cannot directly read push tokens", "notification public RPCs are SECURITY INVOKER", "quiet hours defer delivery", "new follow enqueues one social push", "blocked actor notifications are suppressed", "duplicate event creates only one outbox row", "hourly anti-spam budget blocks a fifth push", "invite acceptance enqueues", "published Journey chapter notifies", "service claim path claims due push jobs", "delivery context rechecks preferences", "disabled device token is persisted"], "Notifications pgTAP");
+const notificationsHardeningTest = await read("supabase/tests/database/010_notifications_hardening.test.sql");
+requireAll(notificationsHardeningTest, [
+  "select plan(15)",
+  "another account cannot steal an enabled Expo token",
+  "a disabled device token may move to a different signed-in account",
+  "unfollow and refollow cannot manufacture another push",
+  "reaction changes reuse one stable post-user push event",
+  "delivery is suppressed when queued content becomes hidden",
+  "streak-risk dedupe uses the recipient-local calendar date",
+  "UTC date cannot create a false streak-risk event",
+], "Notifications hardening pgTAP");
 
 const ci = await read(".github/workflows/ci.yml");
 requireAll(ci, ["supabase/setup-cli@v2", "supabase start", "supabase db lint --level error --fail-on error", "supabase test db supabase/tests/database supabase/tests/local"], "CI database gate");
