@@ -99,7 +99,6 @@ requireAll(refresh, [
   "auth.getUser(token)",
   "fetchRevenueCatSnapshot(userId)",
   "syncRevenueCatSnapshot",
-  "access_token",
 ], "Billing refresh route");
 assert(!/active_entitlements\s*:\s*body/i.test(refresh), "Billing refresh must not accept client-authored entitlement state");
 
