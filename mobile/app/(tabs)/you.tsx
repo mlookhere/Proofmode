@@ -177,6 +177,13 @@ export default function You() {
           </View>
           <Text style={styles.settingsArrow}>›</Text>
         </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.push("/settings/billing")} style={styles.settingsRow}>
+          <View style={styles.journeyCopy}>
+            <Text style={styles.journeyTitle}>MEMBERSHIP</Text>
+            <Text style={styles.journeyMeta}>PROOF+ · CREATOR · RESTORE</Text>
+          </View>
+          <Text style={styles.settingsArrow}>›</Text>
+        </Pressable>
       </Surface>
 
       {blockedUsers.length > 0 ? (
@@ -233,7 +240,7 @@ const styles = StyleSheet.create({
   postRow: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },
   postKind: { color: colors.hot, fontSize: 9, fontWeight: "900", width: 70 },
   postCaption: { color: colors.muted, marginTop: 3 },
-  settingsRow: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.md },
+  settingsRow: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },
   settingsArrow: { color: colors.hot, fontSize: 28, fontWeight: "700" },
   blockedSection: { marginBottom: spacing.xl },
   blockedRow: { minHeight: 58, flexDirection: "row", alignItems: "center", borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },
