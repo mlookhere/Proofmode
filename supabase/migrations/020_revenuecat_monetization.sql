@@ -58,6 +58,8 @@ create index if not exists subscriptions_user_provider_status_idx
 
 revoke insert, update, delete on table public.subscriptions from public, anon, authenticated;
 revoke all on table public.billing_events from public, anon, authenticated;
+-- Service-role-only invoker wrappers call explicitly granted implementations in the non-exposed schema.
+grant usage on schema private to service_role;
 
 create or replace function private.recompute_effective_plan_v1(target_user uuid)
 returns text
