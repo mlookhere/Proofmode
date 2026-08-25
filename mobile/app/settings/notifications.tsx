@@ -195,7 +195,7 @@ export default function NotificationSettings() {
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
           {saved ? <Text style={styles.saved}>SAVED</Text> : null}
-          <PrimaryButton disabled={isSaving} onPress={() => void save()}>{isSaving ? "SAVING…" : "SAVE NOTIFICATIONS"}</PrimaryButton>
+          <PrimaryButton onPress={() => void save()}>{isSaving ? "SAVING…" : "SAVE NOTIFICATIONS"}</PrimaryButton>
         </>
       ) : null}
 
