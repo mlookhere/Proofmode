@@ -21,6 +21,7 @@ requireAll(migration, [
   "subscriptions_provider_identifier_idx",
   "subscriptions_user_provider_status_idx",
   "revoke insert, update, delete on table public.subscriptions from public, anon, authenticated",
+  "grant usage on schema private to service_role",
   "private.recompute_effective_plan_v1",
   "current_plan = 'black'",
   "private.sync_revenuecat_entitlements_v1",
@@ -124,7 +125,7 @@ const pricing = await read("app/pricing/page.tsx");
 requireAll(pricing, [
   'plan: "proof_plus" | "creator"',
   'plan="proof_plus"',
-  "PROOFMODE BLACK",
+  "ProofMode Black",
   "There is no public application",
 ], "Pricing page");
 assert(!/plan=["']black["']/i.test(pricing), "Pricing must not expose a Black purchase action");
