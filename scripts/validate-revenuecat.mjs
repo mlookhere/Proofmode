@@ -108,6 +108,9 @@ requireAll(checkout, [
   "REVENUECAT_PROOF_PLUS_PURCHASE_URL",
   "REVENUECAT_CREATOR_PURCHASE_URL",
   "purchaseUrl(configuredUrl, user.id, user.email)",
+  'url.protocol !== "https:"',
+  'url.hostname !== "pay.rev.cat"',
+  "encodeURIComponent(userId)",
   'event_name: "purchase_started"',
   '.eq("provider", "stripe")',
 ], "Web RevenueCat checkout");
@@ -165,7 +168,6 @@ requireAll(mobileBilling, [
   "Purchases.isConfigured",
   "Purchases.getAppUserID",
   "Purchases.logIn",
-  "Purchases.logOut",
   "Purchases.getOfferings",
   "offerings.current?.availablePackages",
   "Purchases.purchasePackage",
@@ -177,6 +179,7 @@ requireAll(mobileBilling, [
   "/api/billing/refresh",
   "fetchServerEntitlements",
 ], "Mobile RevenueCat client");
+assert(!/Purchases\.logOut\s*\(/.test(mobileBilling), "Custom-ID-only RevenueCat integration must not create anonymous IDs with logOut()");
 assert(mobileBilling.includes('if (identity.includes("black")) return null'), "Mobile Offering filtering must reject Black packages");
 assert(!/REVENUECAT_(?:SECRET|WEBHOOK)/.test(mobileBilling), "RevenueCat server credentials leaked into the mobile billing client");
 
