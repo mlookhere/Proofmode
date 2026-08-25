@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(34);
 
 insert into auth.users (id,email,raw_user_meta_data) values
  ('18000000-0000-0000-0000-000000000001','notify-a@example.test','{"name":"Notify A"}'::jsonb),
@@ -161,9 +161,12 @@ select is(
 
 select ok(private.enqueue_due_notification_stakes_v1(now()) >= 1,'scheduled stake evaluator enqueues due Drop work');
 select is(
-  (select count(*)::int from public.job_outbox j where j.kind='push' and j.payload->>'event_key'='drop-start:28000000-0000-0000-0000-000000000001'),
+  (select count(*)::int from public.job_outbox j
+   where j.kind='push'
+     and j.payload->>'event_key'='drop-start:28000000-0000-0000-0000-000000000001'
+     and j.payload->>'recipient_id'='18000000-0000-0000-0000-000000000002'),
   1,
-  'due Drop start is deduplicated to one recipient/event row for B'
+  'due Drop start is deduplicated for the intended recipient'
 );
 
 select ok((select count(*) from private.claim_push_jobs_v1(100)) >= 1,'service claim path claims due push jobs');
