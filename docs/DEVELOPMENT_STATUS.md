@@ -7,7 +7,7 @@
 
 ### Implemented and verified
 - Expo SDK 57 mobile app with Home / Explore / Post / Crews / You.
-- Supabase migrations `001` through `016` are applied to the connected Proofmode staging project.
+- Supabase migrations `001` through `017` are applied to the connected Proofmode staging project.
 - The canonical launch library is enforced at exactly 60 challenge templates.
 - RLS-only `SECURITY DEFINER` helpers live in the non-exposed `private` schema instead of public RPC space.
 - The obsolete `join_public_challenge` RPC is removed; `join_challenge_v2` is the single join path.
@@ -52,6 +52,17 @@
 - The post-016 security advisor has no exposed `SECURITY DEFINER` warnings; only the three pre-existing RLS-enabled/no-policy informational notices for server-only operational tables remain. The performance advisor also no longer reports the three obsolete post-write-policy init-plan findings; unrelated legacy FK/RLS/index notices remain separate technical debt.
 - A post-016 hosted integrity audit returned zero mismatches for publication/moderation/media ownership, Journey/post and proof/post linkage, proof-producing post kinds, verification authorization, blocked social/Journey edges, duplicate active Journeys/daily proofs, future published posts, and ready media without posts.
 - A rollback-only hosted hardening smoke verified direct-post-write denial, ordinary Journey assignment, Reset attempt-two creation and retry idempotency, Black member six, and anonymous public read wrappers, then confirmed zero fixture residue.
+- Sharing/Attribution migration `017` is applied and hosted-verified on staging. It adds only three public-safe read RPCs for canonical post, Receipt, and invite-link resolution; each public function is a `SECURITY INVOKER` wrapper over a private privileged implementation with explicit `anon`, `authenticated`, and `service_role` execute grants.
+- Receipts remain canonical `proofs` rows and IDs. Stage 10 adds no `receipts` table or alternate credibility ledger, and attribution state never participates in Proof Score, verification, streak, or leaderboard logic.
+- Canonical HTTPS content contracts now cover `/p/:postId`, `/r/:receiptId`, `/c/:slug`, `/j/:journeyId`, `/u/:handle`, and `/invite/:code`; public-safe web fallbacks provide exact-content metadata/OG context plus Open in App/participation doorways, while Expo Router aliases resolve the same links to native destinations.
+- Native sharing uses the operating-system share sheet across feed/post, Drop, Journey, Passport, Crew invite, and Receipt surfaces. Web uses Web Share with clipboard fallback rather than adding platform-specific posting SDKs.
+- Receipt rendering supports deterministic 9:16, 4:5, and 1:1 SVG variants plus canonical text/link sharing. Receipt rendering reads through the same public-safe Receipt RPC rather than using a service-role bypass.
+- Web and mobile preserve source/invite context across magic-link auth returns with a 30-day acquisition window. Analytics remains non-authoritative, while canonical invite ownership/claim state remains in `invites` and `invite_claims` through `join_challenge_v2`.
+- Apple AASA and Android Digital Asset Links endpoints are implemented for `proofmode.app` and the `com.proofmode.app` identifiers. Missing or malformed signing identity fails closed with a non-cacheable configuration error instead of serving a misleading empty association.
+- Stage 10 pgTAP contains 17 transactional assertions for public/private/moderation/block visibility, Receipt identity, invite resolution, explicit grants, invoker/definer separation, and the no-duplicate-Receipt-ledger rule. The earlier Journey same-day fixture is pinned to deterministic same-calendar-day timestamps so CI is no longer UTC-midnight-sensitive.
+- CI #117 on Stage 10 code head `b901b17f7fa7d8c96d48877b1faa69b41bcaf1d1` passed Foundation, Database startup/lint/all pgTAP, Mobile typecheck, and Web typecheck/build before this documentation checkpoint.
+- Hosted Stage 10 verification confirms three public invoker wrappers, three private definers, all expected `anon`/`authenticated` execute grants, and zero `public.receipts` table. Rollback-only hosted behavior passed anonymous public post/Receipt reads, unpublished/private hiding, block-aware post/Receipt/invite hiding, invite capability resolution, and canonical invite-claim idempotency; both smoke passes left zero fixture residue.
+- Post-017 security/performance advisors are unchanged from the pre-017 baseline: no new Stage 10 notices were introduced. The three existing RLS-enabled/no-policy informational notices and unrelated legacy FK/RLS/index findings remain separate technical debt.
 - One mobile Supabase client with persistent AsyncStorage-backed sessions.
 - One root auth/session provider with foreground/background token refresh handling.
 - The plan-required email magic-link fallback is implemented with `proofmode://auth` deep-link session completion; the temporary password bootstrap is removed.
@@ -74,13 +85,13 @@
 - Root `next` is patched from `16.2.11` to `16.3.2`; the resulting lock resolves `postcss@8.5.23` and `sharp@0.35.3`, and both full and production-only root npm audits report zero vulnerabilities.
 - Next `16.3.2` passes ProofMode Web typecheck and production build with the existing `typescript@6.0.3` compatibility pin.
 - The mobile npm audit reports zero high/critical findings and 10 moderate findings in the Expo SDK-57 tooling graph. The concrete vulnerable chain is `expo@57.0.15 → @expo/config-plugins@57.0.8 → xcode@3.0.1 → uuid@7.0.3`; npm provides no safe SDK-57-compatible aggregate remediation, so no forced Expo rollback or unsupported uuid override is used.
-- Foundation validation covers migration contracts, media/runtime hardening, Social Actions/security/performance contracts, Journey/Proof/Passport contracts, cross-layer hardening contracts, root package/lock parity, dependency security floors, TypeScript compatibility, and locked Web CI.
+- Foundation validation covers migration contracts, media/runtime hardening, Social Actions/security/performance contracts, Journey/Proof/Passport contracts, cross-layer hardening contracts, Sharing/Attribution route/RPC/share/association contracts, root package/lock parity, dependency security floors, TypeScript compatibility, and locked Web CI.
 - CI covers foundation validation, local Supabase startup, database linting, transactional pgTAP tests, mobile locked install/typecheck, and web locked install/typecheck/build.
 - GitHub Issues are the durable control plane: `main` is released history, `dev` is integration, and work/bug branches are Issue-backed. The repository is public; current repository control remains in force while native branch protection/rulesets can be evaluated separately.
 
 ### Present but not fully external/device-verified
 - Hosted Supabase must allow `proofmode://auth` before physical-device magic-link testing; the local Supabase config already allows it.
-- Universal/App Link configuration exists; hosted association files and device-level tests are still required.
+- Universal/App Link code and hosted association endpoints are implemented and build-verified, but production `APPLE_TEAM_ID` / `ANDROID_APP_CERT_SHA256` values and physical-device link tests are still required. Fresh-install/deferred-link behavior is not claimed as device-verified.
 - Apple and Google sign-in still require real provider credentials/configuration and physical-device verification.
 - Cloudflare R2/Stream credentials, Stream webhook registration/secret, production media delivery base URL, and `CRON_SECRET` must be configured in the deployed environment before end-to-end media validation.
 - Physical-device camera/library selection and real R2/Stream upload/playback must still be exercised after those provider settings exist.
@@ -89,25 +100,24 @@
 - Next.js has announced another scheduled security release for August 26, 2026; re-audit the locked root dependency set before any public release occurring after that patch is available.
 
 ### Completed integration audit pass
-- Media/Create runtime, authorization, recovery, provider lifecycle, cleanup, account isolation, focused-video behavior, Social Actions, Journey/Proof/Passport, and their shared database boundaries received another integration pass.
-- Cross-layer defects found by that audit are captured in Issue #25 / PR #26 and verified by migration `016`, pgTAP, CI #107 on the pre-documentation code head, hosted advisors, integrity queries, and rollback-only staging behavior checks. The current documentation-only head still requires its final CI/control pass before merge.
+- Media/Create runtime, authorization, recovery, provider lifecycle, cleanup, account isolation, focused-video behavior, Social Actions, Journey/Proof/Passport, Sharing/Attribution, and their shared database boundaries received integration validation.
+- Cross-layer defects found by the prior audit remain captured in Issue #25 / PR #26 and verified by migration `016`, pgTAP, CI, hosted advisors, integrity queries, and rollback-only staging behavior checks.
+- Stage 10 Sharing/Attribution is implemented in Issue #27 / PR #30, with migration `017`, CI #117 on the pre-documentation code head, hosted RPC/ACL verification, unchanged advisors, rollback-only public/private/block behavior checks, and invite-claim idempotency verification. This documentation head still requires final exact-head CI/control before merge to `dev`.
 - Feed publication-time eligibility remains enforced by migration `009` and verified on staging.
 - Root dependency reproducibility remains locked and the prior high-severity Next/PostCSS/sharp findings remain remediated.
 - Mobile dependency findings remain captured with their exact Expo/uuid chain and are explicitly left upstream rather than force-fixed.
 
 ### Not implemented
-- Sharing/attribution and hosted universal-link association files.
 - Push notifications/preferences.
 - RevenueCat monetization.
 - Sentry and PostHog production instrumentation.
 
 ## Execution order from here
 
-1. **Sharing and attribution** — exact-content links, hosted association files, native share, invite attribution.
-2. **Push and monetization** — notification preferences/contextual push first, then RevenueCat.
-3. **Closed alpha** — seed content, small real communities, activation/retention/safety/media-cost validation.
+1. **Push and monetization** — notification preferences/contextual push first, then RevenueCat.
+2. **Closed alpha** — seed content, small real communities, activation/retention/safety/media-cost validation.
 
-Auth provider/device configuration and Media/Create provider/device validation remain parallel release gates. They do not block safe code validation, but they must not be represented as complete until the real hosted/provider/device checks pass.
+Auth provider/device configuration, Universal/App Link device verification, and Media/Create provider/device validation remain parallel release gates. They do not block safe code validation, but they must not be represented as complete until the real hosted/provider/device checks pass.
 
 ## DRY / KISS / YAGNI guardrails
 
