@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import {
   asRevenueCatResponse,
+  claimRevenueCatRefresh,
   fetchRevenueCatSnapshot,
   RevenueCatError,
   revenueCatAdminClient,
@@ -30,8 +31,17 @@ async function requireUserId(request: Request) {
 export async function POST(request: Request) {
   try {
     const userId = await requireUserId(request);
+    const admin = revenueCatAdminClient();
+    const retryAfterSeconds = await claimRevenueCatRefresh(admin, userId);
+    if (retryAfterSeconds > 0) {
+      return Response.json(
+        { error: "Refresh requested too recently", retryAfterSeconds },
+        { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+      );
+    }
+
     const snapshot = await fetchRevenueCatSnapshot(userId);
-    await syncRevenueCatSnapshot(revenueCatAdminClient(), {
+    await syncRevenueCatSnapshot(admin, {
       eventId: `refresh:${userId}:${snapshot.snapshotAt}`,
       eventType: "REFRESH",
       userId,
