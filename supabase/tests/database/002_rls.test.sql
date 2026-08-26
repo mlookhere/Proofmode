@@ -107,9 +107,11 @@ select lives_ok(
   'authenticated users can unwatch their own Drop'
 );
 
-select lives_ok(
+select throws_ok(
   $$update public.profiles set display_name = 'Updated User B' where id = '10000000-0000-0000-0000-000000000012'$$,
-  'authenticated users can update their allowed profile fields'
+  '42501',
+  null,
+  'authenticated profile mutation is no longer a direct client capability'
 );
 
 select throws_ok(
