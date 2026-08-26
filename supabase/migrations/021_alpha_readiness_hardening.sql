@@ -108,7 +108,7 @@ begin
 
   if last_attempt is not null and last_attempt > current_attempt - pg_catalog.make_interval(secs => 60) then
     retry_seconds := pg_catalog.ceil(
-      pg_catalog.extract(epoch from (last_attempt + pg_catalog.make_interval(secs => 60) - current_attempt))
+      pg_catalog.date_part('epoch', last_attempt + pg_catalog.make_interval(secs => 60) - current_attempt)
     )::integer;
     return greatest(1, retry_seconds);
   end if;
