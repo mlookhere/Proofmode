@@ -35,6 +35,7 @@ assert(JSON.stringify(migrations) === JSON.stringify([
   "018_notifications_mvp.sql",
   "019_notifications_hardening.sql",
   "020_revenuecat_monetization.sql",
+  "021_alpha_readiness_hardening.sql",
 ]), `Unexpected migration set: ${migrations.join(", ")}`);
 
 const templatesSql = await read("supabase/migrations/004_template_library.sql");
